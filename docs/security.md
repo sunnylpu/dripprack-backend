@@ -186,5 +186,44 @@ Every incoming HTTP request generates or propagates an `X-Request-Id` UUID heade
    - Default address switches and default promotions during deletion execute inside MongoDB multi-document transactions (`session.withTransaction`), guaranteeing consistent state transitions.
    - Cart item modifications utilize atomic `$inc` updates and atomic `$push` with `{ 'items.product': { $ne: productId } }`, preventing duplicate product lines and preventing race conditions during concurrent additions.
 
+---
+
+## 8. Checkout, Order & Payment Security Controls (Phase 6)
+
+1. **Strict Customer-Only Authorization & Anti-BOLA Scoping:**
+   - All customer order endpoints (`/api/v1/orders/*`, `/api/v1/payments/create-intent`) enforce `authenticate` and `authorize('customer')`. Admin tokens receive `403 Forbidden` (`FORBIDDEN`); unauthenticated requests receive `401 Unauthorized` (`UNAUTHORIZED`).
+   - Order history (`GET /my-orders`), detail inspection (`GET /my-orders/:reference`), and cancellation (`POST /my-orders/:reference/cancel`) scope queries strictly to `{ orderReference: reference, customer: req.user._id }`.
+   - Cross-user order inspection or cancellation attempts return `404 Not Found` (`ORDER_NOT_FOUND`) without leaking order existence or customer details.
+
+2. **Server-Authoritative Pricing & Anti-Tampering:**
+   - Client requests cannot submit `subtotalCents`, `shippingCents`, `taxCents`, `totalCents`, `unitPriceCents`, `orderStatus`, `paymentStatus`, or actor identities.
+   - Order creation authoritatively queries live `Product.priceCents` from MongoDB and re-validates stock, publication status, and category activity within an ACID transaction.
+   - Informational quotes (`POST /orders/quote`) do not hold or reserve inventory.
+
+3. **Atomic Stock Reservation & Zero Overselling Guarantee:**
+   - Stock reservations execute atomic conditional increments: `{ 'stock.available': { $gte: quantity } }`, increasing `stock.reserved` while decreasing `stock.available` by requested quantity.
+   - Product stock satisfies the invariant $\text{available} = \text{physical} - \text{reserved}$ at all times.
+   - Multi-document transactions (`session.withTransaction`) ensure that order creation, payment record generation, inventory reservation movements, and customer cart evacuation succeed or roll back together.
+
+4. **Idempotency Protection Against Network Retries & Race Conditions:**
+   - The `Idempotency-Key` header (1–128 chars) is validated on order placement and indexed uniquely on `orders` via `partialFilterExpression: { idempotencyKey: { $type: "string" } }`.
+   - Replaying the identical request payload returns the original order with `200 OK` without duplicating stock reservation or payment records.
+   - Replaying the same idempotency key with a modified payload is rejected with `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+   - Concurrent duplicate-key requests are halted by the database unique index, resolving race conditions safely.
+
+5. **Rate Limiting Against Scalping & Inventory Locking:**
+   - `checkoutLimiter` limits order creation to 20 requests per 15 minutes per IP to prevent rapid inventory exhaustion.
+
+6. **Payment Provider Isolation & Cryptographic Webhook Verification:**
+   - Cash on Delivery (COD) is the default active payment provider for V1. Online payments remain disabled by default (`ENABLE_ONLINE_PAYMENTS = false`), returning `400 Bad Request` (`ONLINE_PAYMENTS_DISABLED`) with zero state mutation if invoked without configuration.
+   - Webhooks are verified against `req.rawBody` using HMAC-SHA256 signatures prior to JSON processing. Invalid or forged signatures return `400 Bad Request` (`INVALID_WEBHOOK_SIGNATURE`).
+   - Webhook amounts, currencies, and order references are validated against database records before any state transition occurs.
+   - Webhook idempotency is enforced via `payment.processedEvents`, acknowledging duplicate event deliveries with `200 OK` without repeating mutations.
+   - Compensating failure flow: payment failure/expiration events for unpaid orders (`awaiting_payment`) cancel the order and release reserved stock exactly once.
+
+7. **Zero Cardholder Secret Storage:**
+   - The application never accepts, logs, or stores raw credit card numbers, CVVs, or gateway API secret keys.
+
+
 
 

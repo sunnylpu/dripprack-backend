@@ -278,11 +278,80 @@ The address module (`src/modules/addresses/`) implements customer-owned shipping
 
 ---
 
-## 7. Unresolved Decisions & Safe Defaults
+## 7. Checkout, Order Management & Payment Foundation Architecture (Phase 6)
+
+### 7.1 Server-Authoritative Checkout Quotes (`POST /api/v1/orders/quote`)
+1. **Informational Non-Reservation Quote:** Quotes allow customers to preview exact landed costs without locking inventory prematurely.
+2. **Dynamic Live Catalog Pricing:** Cart prices are never trusted. The service queries live Product and Category records, verifying:
+   - Product status is strictly `published`.
+   - Category is strictly active (`category.isActive === true`).
+   - Available stock satisfies requested quantity (`stock.available >= quantity`).
+3. **Integer Minor Unit Currency Arithmetic:**
+   - $\text{subtotalCents} = \sum (\text{unitPriceCents} \times \text{quantity})$
+   - $\text{shippingCents} = \begin{cases} 0 & \text{if } \text{subtotalCents} \ge \text{FREE\_SHIPPING\_THRESHOLD\_CENTS} \\ \text{SHIPPING\_FLAT\_FEE\_CENTS} & \text{otherwise} \end{cases}$
+   - $\text{taxCents} = \operatorname{round}\left(\frac{\text{subtotalCents} \times \text{TAX\_RATE\_PERCENT}}{100}\right)$
+   - $\text{totalCents} = \text{subtotalCents} + \text{shippingCents} + \text{taxCents}$
+4. **Address Ownership Verification:** Rejects address IDs belonging to other customers with `404 Not Found`.
+
+### 7.2 ACID Transactional Order Placement (`POST /api/v1/orders`)
+Order placement coordinates all critical business state changes inside a MongoDB multi-document transaction (`session.withTransaction`):
+1. **Cart & Address Reload:** Verifies ownership and non-empty cart within the transaction session.
+2. **Atomic Conditional Stock Reservation:**
+   ```javascript
+   const updatedProduct = await Product.findOneAndUpdate(
+     {
+       _id: item.product,
+       status: 'published',
+       'stock.available': { $gte: item.quantity } // Prevents overselling at the engine level
+     },
+     {
+       $inc: {
+         'stock.reserved': item.quantity,
+         'stock.available': -item.quantity
+       }
+     },
+     { new: true, session }
+   );
+   ```
+   If any product fails the condition, the transaction automatically aborts with `409 Conflict` (`INSUFFICIENT_STOCK`).
+3. **Immutable Snapshot Creation:**
+   - Order line items record immutable snapshots of `sku`, `name`, `unitPriceCents`, `quantity`, and `lineTotalCents`. Subsequent catalog renames or price changes do not affect historical orders.
+   - Delivery address fields (`recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, `country`) are deeply copied into the Order document.
+4. **Payment Record Creation:** Persists a `Payment` document linked to the order reference with `amountCents` matching `order.totalCents`.
+5. **Inventory Movement Audit Records:** Persists append-only `InventoryMovement` entries of type `'reservation'` recording before/after physical, available, and reserved stock snapshots.
+6. **Cart Evacuation:** Clears the customer's cart (`$set: { items: [] }`) within the transaction.
+7. **Rollback Guarantee:** If any step fails, order, payments, inventory reservations, audit movements, and cart changes roll back together.
+
+### 7.3 Idempotency Strategy
+- **Header:** `Idempotency-Key` (required for order creation).
+- **Database Safeguard:** Unique index on `idempotencyKey` with `partialFilterExpression: { idempotencyKey: { $type: "string" } }` on `orders`.
+- **Payload Hash Verification:** SHA-256 hash of `{ addressId, paymentMethod }`.
+- **Replay Behavior:**
+  - Matching key + identical payload: Returns original order with `200 OK` without re-running reservation, payment, or cart clearing.
+  - Matching key + modified payload: Returns `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+  - Concurrent duplicate requests: Database unique constraint halts duplicate creation; the service catches code 11000 and returns the canonical order.
+
+### 7.4 Payment Gateway Abstraction & Webhook Architecture
+1. **Provider-Neutral Gateway Boundary:** Decoupled `PaymentGateway` interface supporting Cash on Delivery (COD) and future online providers (Stripe, PayPal).
+2. **Test Isolation via Mock Gateway:** `MockPaymentGateway` generates synthetic intents and validates HMAC signatures during test runs without network calls.
+3. **Safe Production Defaults:** Online payments remain disabled by default (`ENABLE_ONLINE_PAYMENTS = false`). When disabled, attempts to create online orders or payment intents return `400 Bad Request` (`ONLINE_PAYMENTS_DISABLED`) with zero inventory mutations.
+4. **Raw Body Webhook Verification:** Express middleware preserves raw request bytes in `req.rawBody` prior to JSON parsing. Webhook handlers verify cryptographic HMAC-SHA256 signatures before trusting payload data.
+5. **Webhook Idempotency:** Persists processed event IDs in `payment.processedEvents`. Duplicate webhook deliveries return `200 OK` without repeating status transitions.
+6. **Compensating Stock Release on Payment Failure:** When a `payment_intent.payment_failed` event is received for an unpaid order (`awaiting_payment`), a transaction atomically cancels the order, sets `isStockRestocked: true`, and releases reserved inventory back to available stock with `'release'` audit movements.
+
+### 7.5 Customer Order Management & Exactly-Once Cancellation
+1. **Ownership-Scoped Access:** `GET /my-orders` and `GET /my-orders/:reference` query strictly by `{ customer: req.user._id }`. Foreign orders return `404 Not Found`.
+2. **Eligible Cancellation States:** Customer cancellation is restricted to `awaiting_payment` and `confirmed`. Orders in `processing`, `shipped`, or `delivered` return `400 Bad Request` (`ORDER_NOT_CANCELLABLE`).
+3. **Paid Orders Refund Barrier:** Paid orders cannot be cancelled without an active refund provider (returns `409 Conflict` `REFUND_NOT_SUPPORTED`).
+4. **Atomic Restocking Protection:** Cancellation conditions on `{ isStockRestocked: false }`. Concurrent or repeated cancellations succeed or fail atomically, guaranteeing that inventory is never released twice.
+
+---
+
+## 8. Unresolved Decisions & Safe Defaults
 
 | Decision Area | Unresolved Aspect | Chosen Safe Default for V1 |
 | :--- | :--- | :--- |
-| **Payment Provider** | Production merchant keys unavailable initially | **Cash on Delivery (COD)** implemented end-to-end. Provider-neutral `IPaymentGateway` interface implemented with a Stripe-ready adapter in disabled mock/sandbox mode until credentials are provided. |
+| **Payment Provider** | Production merchant keys unavailable initially | **Cash on Delivery (COD)** implemented end-to-end. Provider-neutral `PaymentGateway` interface with mock gateway for test suites and Stripe adapter disabled until genuine merchant credentials are provided. |
 | **Tax Calculation** | Dynamic regional jurisdictions (e.g., US states, EU VAT) | Explicit, server-side configurable tax policy via `TAX_RATE_PERCENT` (default: 0% or configured integer percentage). Minor currency calculations only. |
 | **Shipping Fees** | Carrier API integration (FedEx/UPS/DHL) | Server-side tiered rule: Configurable flat fee `SHIPPING_FLAT_FEE_CENTS` (e.g. 500 = $5.00), free above `FREE_SHIPPING_THRESHOLD_CENTS` (e.g. 5000 = $50.00). |
 | **Currency** | Multi-currency exchange rates | Single store currency in minor integer units (e.g. `USD` in cents: $19.99 = `1999`). Zero floating-point rounding errors. |
@@ -290,3 +359,4 @@ The address module (`src/modules/addresses/`) implements customer-owned shipping
 | **Email Delivery** | Third-party SMTP / SendGrid / Resend credentials | Modular `EmailService`: In `development`/`test`, outputs formatted log with reset token and action URL. In `production`, requires validated SMTP/API credentials. |
 | **Image Storage** | S3 / Cloudinary credentials | Image URLs validated against safe HTTPS patterns. Local/trusted mock asset provider in development, decoupled storage interface ready for S3. |
 | **Idempotency** | Duplicate order retries | Client sends `Idempotency-Key` header (UUIDv4) stored on Order collection with unique index constraint. Repeated requests return original order safely. |
+

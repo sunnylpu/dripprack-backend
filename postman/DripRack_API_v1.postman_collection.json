@@ -2,7 +2,7 @@
   "info": {
     "name": "DripRack API v1",
     "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
-    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 5 (Cart & Delivery Address Management)",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 6 (Checkout, Orders & Payment Foundation)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -960,6 +960,362 @@
                   "raw": "{{baseUrl}}{{apiPrefix}}/addresses/{{otherCustomerAddressId}}",
                   "host": ["{{baseUrl}}"],
                   "path": ["{{apiPrefix}}", "addresses", "{{otherCustomerAddressId}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Checkout, Orders & Payments (Phase 6)",
+      "item": [
+        {
+          "name": "Checkout & Order Placement",
+          "item": [
+            {
+              "name": "Generate Checkout Quote",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"addressId\": \"{{addressId}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/quote",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "quote"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Place Order (COD)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    pm.environment.set('orderReference', jsonData.data.orderReference);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "order-idem-test-001"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"paymentMethod\": \"cod\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Replay Place Order (Idempotent 200 OK)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "order-idem-test-001"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"paymentMethod\": \"cod\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Replay Reused Idempotency-Key with Different Payload (409 Conflict)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "order-idem-test-001"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"addressId\": \"{{addressId}}\",\n  \"paymentMethod\": \"online\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Customer Order Management",
+          "item": [
+            {
+              "name": "List My Orders",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/my-orders?page=1&limit=20",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "my-orders"],
+                  "query": [
+                    { "key": "page", "value": "1" },
+                    { "key": "limit", "value": "20" }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Order Details by Reference",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/my-orders/{{orderReference}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "my-orders", "{{orderReference}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Cancel Order & Release Stock",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Customer requested cancellation\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/my-orders/{{orderReference}}/cancel",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "my-orders", "{{orderReference}}", "cancel"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Cross-Customer Order Denial (404 Not Found)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/my-orders/{{otherCustomerOrderRef}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "my-orders", "{{otherCustomerOrderRef}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Admin Role Order Denial (403 Forbidden)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/orders/my-orders",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "orders", "my-orders"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Payments & Webhooks",
+          "item": [
+            {
+              "name": "Create Payment Intent (Online Order)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderReference\": \"{{orderReference}}\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/payments/create-intent",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "payments", "create-intent"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Payment Webhook (Verified Succeeded)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Stripe-Signature",
+                    "value": "{{validWebhookSignature}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_12345\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"orderReference\": \"{{orderReference}}\",\n    \"amountCents\": 5000,\n    \"currency\": \"USD\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "payments", "webhook"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Payment Webhook (Duplicate Idempotency Acknowledged)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Stripe-Signature",
+                    "value": "{{validWebhookSignature}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_test_12345\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"orderReference\": \"{{orderReference}}\",\n    \"amountCents\": 5000,\n    \"currency\": \"USD\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "payments", "webhook"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Payment Webhook (Invalid Signature Denial 400)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Stripe-Signature",
+                    "value": "forged_signature_hex"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"id\": \"evt_forged_999\",\n  \"type\": \"payment_intent.succeeded\",\n  \"data\": {\n    \"orderReference\": \"{{orderReference}}\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/payments/webhook",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "payments", "webhook"]
                 }
               },
               "response": []

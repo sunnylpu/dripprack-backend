@@ -139,6 +139,8 @@ Provides an append-only, tamper-evident audit trail for every single stock chang
 | `newPhysical` | Number | Yes | Physical quantity after mutation (Integer, $\ge 0$) |
 | `previousAvailable`| Number | Yes | Available quantity before mutation (Integer, $\ge 0$) |
 | `newAvailable` | Number | Yes | Available quantity after mutation (Integer, $\ge 0$) |
+| `previousReserved` | Number | No | Reserved quantity before mutation (Integer, $\ge 0$, recorded on reservations and releases) |
+| `newReserved` | Number | No | Reserved quantity after mutation (Integer, $\ge 0$, recorded on reservations and releases) |
 | `actor` | ObjectId | Yes | Ref to `User` performing the action |
 | `actorRole` | String | Yes | Enum: `['admin', 'customer', 'system']` |
 | `orderReference` | String | No | Linked order reference if movement is order-related |
@@ -245,7 +247,7 @@ The primary transaction entity. Contains immutable snapshots of products, pricin
 
 **Indexes:**
 - `{ orderReference: 1 }` (Unique)
-- `{ idempotencyKey: 1 }` (Unique, Sparse)
+- `{ idempotencyKey: 1 }` (Unique with `partialFilterExpression: { idempotencyKey: { $type: "string" } }`)
 - `{ customer: 1, createdAt: -1 }` (Customer history pagination)
 - `{ orderStatus: 1, createdAt: -1 }` (Admin status queries)
 

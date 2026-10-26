@@ -49,12 +49,23 @@ The DripRack testing suite ensures that all business constraints, security contr
 | **AC-32** | Single Default Address Invariant | Enforced via partial unique index `{ user: 1 }` (`partialFilterExpression: { isDefault: true }`). At most one address can have `isDefault: true` per customer. |
 | **AC-33** | Automatic First Address Default | A customer's first created address automatically receives `isDefault: true`. Subsequent creations default to `false` unless explicitly specified. |
 | **AC-34** | Default Promotion on Address Deletion | Deleting a default address automatically promotes the customer's newest remaining address to default inside a MongoDB transaction. If no addresses remain, deletion succeeds cleanly without a default. |
+| **AC-35** | Checkout Quote Live Calculations | Server calculates item subtotals, shipping tier (flat $5 under $50, free $\ge $50), and integer tax from live MongoDB catalog state. Rejects empty carts and unowned addresses. |
+| **AC-36** | Transactional Order Stock Reservation | Order placement atomically increments `stock.reserved` and decrements `stock.available` under condition `stock.available >= quantity`. Invariant $\text{available} = \text{physical} - \text{reserved}$ holds. |
+| **AC-37** | Zero Stock Overselling | When two customers race concurrently for the last unit in stock, exactly one succeeds (201) and the second receives a conflict response (409). Stock counts never go negative. |
+| **AC-38** | Immutable Historical Snapshots | Created orders capture immutable snapshots of item SKUs, product names, unit prices, line totals, and delivery addresses. Subsequent catalog edits never mutate past orders. |
+| **AC-39** | Transactional Rollback & Cart Clearing | If order placement fails midway, stock, payments, audit movements, and cart changes roll back together. Successful order clears cart items within the same transaction. |
+| **AC-40** | Order Idempotency | Replaying identical `Idempotency-Key` and request payload returns original order (200 OK) without double reservation. Replaying same key with different payload returns `409 Conflict`. |
+| **AC-41** | Order History Anti-BOLA Isolation | Customer order listing and detail inspection are strictly scoped to authenticated user (`{ customer: req.user._id }`). Requesting another customer's order returns `404 Not Found`. |
+| **AC-42** | Exactly-Once Order Cancellation | Customer cancellation of eligible orders (`awaiting_payment`, `confirmed`) cancels order and releases reserved stock exactly once. Concurrent/repeated cancellation requests return `409 Conflict`. |
+| **AC-43** | Paid Order Cancellation Limitation | Paid orders cannot be cancelled by customer without an active refund provider, returning `409 Conflict` (`REFUND_NOT_SUPPORTED`). |
+| **AC-44** | Payment Gateway Isolation | Online payment returns `400 Bad Request` (`ONLINE_PAYMENTS_DISABLED`) when online processing is disabled or unconfigured in production. Mock gateway safely generates intents in test/dev modes. |
+| **AC-45** | Cryptographic Webhook Verification & Idempotency | Payment webhook verifies HMAC-SHA256 signatures against `req.rawBody`. Duplicate event deliveries acknowledge idempotently without repeating state transitions. Payment failure triggers compensating stock release. |
 
 ---
 
 ## 3. Transactional Test Environment
 
-Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js`, `tests/cart.test.js`, and `tests/address.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
+Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js`, `tests/cart.test.js`, `tests/address.test.js`, `tests/order.test.js`, and `tests/payment.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
 ```javascript
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
@@ -71,6 +82,12 @@ beforeAll(async () => {
 ```bash
 # Run complete test suite (all phases regression)
 npm test
+
+# Run checkout & order management tests specifically
+npx vitest run tests/order.test.js
+
+# Run payment foundation & webhook tests specifically
+npx vitest run tests/payment.test.js
 
 # Run cart module tests specifically
 npx vitest run tests/cart.test.js

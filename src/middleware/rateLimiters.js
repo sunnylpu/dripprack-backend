@@ -43,5 +43,6 @@ export const checkoutLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: createRateLimitHandler('Checkout rate limit exceeded. Please wait before placing more orders.')
+  handler: createRateLimitHandler('Checkout rate limit exceeded. Please wait before placing more orders.'),
+  skip: (req) => env.NODE_ENV === 'test' && !req.headers['x-test-rate-limit']
 });

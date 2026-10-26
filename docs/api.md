@@ -779,6 +779,131 @@ All address endpoints require `authenticate` and `authorize('customer')`. Owners
 - **Description:** Delete an owned delivery address.
 - **Promotion Rule:** If deleted address was default, the most recently created remaining address is automatically promoted to default. If no addresses remain, no default is assigned.
 
+---
+
+## 10. Phase 6 Checkout, Orders & Payment Implemented Endpoint Details
+
+### 10.1 POST `/api/v1/orders/quote`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Description:** Compute a server-authoritative checkout quote from live database catalog state. Does **not** reserve stock or mutate database records.
+- **Request Body:**
+  ```json
+  {
+    "addressId": "671e54a9f4c3981b238a7123"
+  }
+  ```
+- **Business Rules:**
+  - Address must belong to authenticated customer (otherwise `404 Not Found`).
+  - Cart cannot be empty (otherwise `400 Bad Request` `CART_EMPTY`).
+  - Product must be `published`, category `isActive`, and available stock must satisfy requested quantity.
+  - Subtotal calculated from live Product `priceCents`.
+  - Flat shipping fee of `500` cents ($5.00) applied if subtotal < `5000` cents ($50.00). Free shipping (`0` cents) if subtotal $\ge 5000$ cents.
+  - Tax calculated as integer minor units: $\operatorname{round}(\text{subtotal} \times \text{TAX\_RATE\_PERCENT} / 100)$.
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Checkout quote calculated successfully",
+    "data": {
+      "shippingAddress": { ... },
+      "items": [
+        {
+          "product": "671e54a9f4c3981b238a7123",
+          "sku": "DRIP-HOODIE-BLK",
+          "name": "Drip Hoodie Black",
+          "quantity": 2,
+          "unitPriceCents": 4500,
+          "lineTotalCents": 9000
+        }
+      ],
+      "subtotalCents": 9000,
+      "shippingCents": 0,
+      "taxCents": 0,
+      "totalCents": 9000,
+      "currency": "USD",
+      "isAuthoritative": false,
+      "quotedAt": "2026-10-27T03:00:00.000Z"
+    }
+  }
+  ```
+
+---
+
+### 10.2 POST `/api/v1/orders`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Rate Limit:** 20 requests per 15 minutes per IP (`checkoutLimiter`)
+- **Headers:** `Idempotency-Key` (required string, 1–128 chars)
+- **Request Body:**
+  ```json
+  {
+    "addressId": "671e54a9f4c3981b238a7123",
+    "paymentMethod": "cod"
+  }
+  ```
+- **Transaction Flow:**
+  1. Verifies non-empty cart and owned address.
+  2. Atomically reserves stock via conditional `$gte` updates on `stock.available`.
+  3. Creates `Order` with immutable product item and shipping address snapshots.
+  4. Creates `Payment` record with amount matching order total.
+  5. Records `'reservation'` `InventoryMovement` audit entries.
+  6. Clears customer cart.
+- **Idempotency:**
+  - Matching key + identical payload: Returns original order with `200 OK`.
+  - Matching key + different payload: Returns `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+- **Response (201 Created):** Returns created Order document.
+
+---
+
+### 10.3 GET `/api/v1/orders/my-orders`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Query Parameters:** `page` (default: 1), `limit` (default: 20, max: 100), `orderStatus` (optional filter).
+- **Description:** Returns paginated list of authenticated customer's orders sorted by `createdAt: -1`.
+- **Response (200 OK):** Standard paginated envelope with `data: Order[]` and `meta`.
+
+---
+
+### 10.4 GET `/api/v1/orders/my-orders/:reference`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Description:** Retrieve detailed order and linked payment information by order reference.
+- **Anti-BOLA:** Scoped strictly by `{ orderReference: reference, customer: req.user._id }`. Requesting another customer's order returns `404 Not Found` (`ORDER_NOT_FOUND`).
+
+---
+
+### 10.5 POST `/api/v1/orders/my-orders/:reference/cancel`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Description:** Cancel an eligible order (`awaiting_payment` or `confirmed`).
+- **Restock Guarantee:**
+  - Transitions order to `cancelled` and sets `isStockRestocked: true` inside a multi-document transaction.
+  - Atomically increments `stock.available` and decrements `stock.reserved`.
+  - Records `'release'` `InventoryMovement` audit records.
+  - Repeated cancellation calls return `409 Conflict` (`ORDER_ALREADY_CANCELLED`) and never restock inventory twice.
+- **Paid Order Limitation:** Orders with `paymentStatus: 'paid'` return `409 Conflict` (`REFUND_NOT_SUPPORTED`) until refund gateway processing is enabled.
+
+---
+
+### 10.6 POST `/api/v1/payments/create-intent`
+- **Access:** Authenticated Customer only (`customer` role)
+- **Request Body:**
+  ```json
+  {
+    "orderReference": "ORD-20261027-A9F3K7"
+  }
+  ```
+- **Description:** Initializes external payment intent/session for an online order in `awaiting_payment` status.
+- **Default State:** Returns `400 Bad Request` (`ONLINE_PAYMENTS_DISABLED`) when online payments are disabled or unconfigured in production.
+
+---
+
+### 10.7 POST `/api/v1/payments/webhook`
+- **Access:** Public payment provider callback
+- **Headers:** `Stripe-Signature` or `X-Webhook-Signature` (HMAC-SHA256)
+- **Body:** Raw JSON payload
+- **Verification:** Cryptographically verified against `req.rawBody` buffer. Invalid signatures return `400 Bad Request` (`INVALID_WEBHOOK_SIGNATURE`).
+- **Idempotency:** Replaying processed event IDs returns `200 OK` (`duplicate: true`) without re-applying state mutations.
+- **Compensating Release:** When `payment_intent.payment_failed` is received for an `awaiting_payment` order, the order is cancelled and reserved inventory is released exactly once.
+
+
 
 
 

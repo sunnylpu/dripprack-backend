@@ -254,6 +254,30 @@ All cart and address endpoints require both `authenticate` and `authorize('custo
 4. **Single Default Address Invariant:** Database-level partial unique index on `{ user: 1 }` (`partialFilterExpression: { isDefault: true }`) guarantees that a customer can never have multiple default addresses under concurrent requests.
 5. **Ownership Scoping:** Address queries always scope by `{ _id: addressId, user: req.user._id }`. Cross-user tampering yields `404 Not Found`.
 
+---
+
+## 11. Checkout, Order Management & Payment Foundation (Phase 6)
+
+Phase 6 implements server-authoritative checkout quotes, atomic multi-document order placement, inventory reservation, idempotency, customer order history, and a provider-neutral payment gateway abstraction.
+
+### Checkout & Order Endpoints:
+- `POST /api/v1/orders/quote`: Compute server-authoritative checkout quote. Validates live catalog pricing, publication status, category activity, address ownership, flat shipping fee ($5.00 under $50, free $\ge $50), and integer minor unit tax without reserving inventory.
+- `POST /api/v1/orders`: ACID transactional order placement. Atomically reserves available stock (`stock.reserved += q, stock.available -= q`), takes immutable snapshots of items and shipping address, generates payment record, records `'reservation'` inventory movements, and clears cart. Guarded by `checkoutLimiter` and `Idempotency-Key`.
+- `GET /api/v1/orders/my-orders`: Retrieve customer's paginated order history, sorted by newest first (`createdAt: -1`).
+- `GET /api/v1/orders/my-orders/:reference`: View detailed order information and associated payment state. Strictly scoped to authenticated customer (anti-BOLA).
+- `POST /api/v1/orders/my-orders/:reference/cancel`: Cancel an eligible order (`awaiting_payment`, `confirmed`). Atomically releases reserved stock back to available quantity and marks `isStockRestocked: true`. Repeated requests never release inventory twice.
+
+### Payment & Webhook Endpoints:
+- `POST /api/v1/payments/create-intent`: Initialize external gateway payment intent for online orders in `awaiting_payment` status.
+- `POST /api/v1/payments/webhook`: Public webhook callback with cryptographic HMAC-SHA256 signature verification against `req.rawBody`. Idempotently acknowledges duplicate event deliveries via `processedEvents`. Automatically triggers compensating inventory release if payment fails or expires.
+
+### Key Invariants & Architectural Rules:
+1. **Zero Overselling Guarantee:** Stock is conditionally reserved at the database engine level (`{ 'stock.available': { $gte: quantity } }`). Concurrent checkout races can never oversell or drive available stock below zero.
+2. **Snapshot Fidelity:** Created orders store frozen copies of SKUs, names, unit prices, line totals, and delivery addresses. Subsequent edits to products or addresses never alter historical order records.
+3. **Idempotency with Payload Hashing:** Replays with matching key and identical payload safely return the canonical order (200 OK). Replays with modified payloads return `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+4. **Safe Payment Defaults:** Cash on Delivery (COD) is the active V1 payment method. Online payments remain disabled by default (`ENABLE_ONLINE_PAYMENTS = false`) until genuine credentials are provided.
+
+
 
 
 

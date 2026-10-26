@@ -7,6 +7,8 @@ import inventoryRoutes from '../modules/inventory/inventory.routes.js';
 import cartRoutes from '../modules/carts/cart.routes.js';
 import addressRoutes from '../modules/addresses/address.routes.js';
 import adminRoutes from '../modules/admin/admin.routes.js';
+import orderRoutes from '../modules/orders/order.routes.js';
+import paymentRoutes from '../modules/payments/payment.routes.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 
 const router = Router();
@@ -32,6 +34,8 @@ router.use('/products', productRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/cart', cartRoutes);
 router.use('/addresses', addressRoutes);
+router.use('/orders', orderRoutes);
+router.use('/payments', paymentRoutes);
 router.use('/admin', adminRoutes);
 
 // Test-only route for role authorization verification

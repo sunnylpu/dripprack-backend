@@ -61,7 +61,15 @@ if (env.NODE_ENV !== 'test') {
 }
 
 // Body Parsing with Strict Payload Limits (DoS protection)
-app.use(express.json({ limit: '100kb' }));
+// verify callback preserves raw buffer for webhook HMAC signature verification
+app.use(
+  express.json({
+    limit: '100kb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '100kb' }));
 
 // Cookie Parsing for HttpOnly Refresh Tokens

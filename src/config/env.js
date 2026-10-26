@@ -35,6 +35,15 @@ const envSchema = z.object({
   SHIPPING_FLAT_FEE_CENTS: z.coerce.number().min(0).default(500), // $5.00
   FREE_SHIPPING_THRESHOLD_CENTS: z.coerce.number().min(0).default(5000), // $50.00
 
+  // Payments Configuration
+  ENABLE_ONLINE_PAYMENTS: z
+    .string()
+    .transform((val) => val === 'true' || val === '1')
+    .default('false'),
+  PAYMENT_PROVIDER: z.enum(['cod', 'stripe', 'mock']).default('cod'),
+  STRIPE_SECRET_KEY: z.string().default(''),
+  STRIPE_WEBHOOK_SECRET: z.string().default(''),
+
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
 });

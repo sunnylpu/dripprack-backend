@@ -65,6 +65,22 @@ const inventoryMovementSchema = new mongoose.Schema(
         message: 'New available stock must be an integer'
       }
     },
+    previousReserved: {
+      type: Number,
+      min: [0, 'Previous reserved stock cannot be negative'],
+      validate: {
+        validator: (v) => v === undefined || Number.isInteger(v),
+        message: 'Previous reserved stock must be an integer'
+      }
+    },
+    newReserved: {
+      type: Number,
+      min: [0, 'New reserved stock cannot be negative'],
+      validate: {
+        validator: (v) => v === undefined || Number.isInteger(v),
+        message: 'New reserved stock must be an integer'
+      }
+    },
     actor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
