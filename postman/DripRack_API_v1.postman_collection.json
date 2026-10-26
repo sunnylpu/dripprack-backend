@@ -2,7 +2,7 @@
   "info": {
     "name": "DripRack API v1",
     "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
-    "description": "Production-grade Secure MERN E-Commerce Backend API Collection",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 2 (Auth & RBAC)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -47,53 +47,14 @@
             }
           },
           "response": []
-        },
-        {
-          "name": "Liveness Probe (API Prefix)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/health/live",
-              "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "health", "live"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Readiness Probe (API Prefix)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/health/ready",
-              "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "health", "ready"]
-            }
-          },
-          "response": []
         }
       ]
     },
     {
-      "name": "Error Cases (Foundation)",
+      "name": "Authentication (Phase 2)",
       "item": [
         {
-          "name": "404 Not Found",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/undefined-route-test",
-              "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "undefined-route-test"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "400 Malformed JSON",
+          "name": "Customer Registration",
           "request": {
             "method": "POST",
             "header": [
@@ -104,12 +65,217 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{ \"malformed\": json syntax error "
+              "raw": "{\n  \"email\": \"customer@driprack.com\",\n  \"password\": \"CustomerPassword123!\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/health/live",
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/register",
               "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "health", "live"]
+              "path": ["{{apiPrefix}}", "auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Customer Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('accessToken', jsonData.data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@driprack.com\",\n  \"password\": \"CustomerPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('adminAccessToken', jsonData.data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@driprack.com\",\n  \"password\": \"AdminPassword123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current Profile (Me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Session (Rotates Cookie)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('accessToken', jsonData.data.accessToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "refresh"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout (Revokes Session)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Cases (Foundation & Auth)",
+      "item": [
+        {
+          "name": "401 Missing Access Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "409 Duplicate Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@driprack.com\",\n  \"password\": \"CustomerPassword123!\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "422 Weak Password Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"weak@driprack.com\",\n  \"password\": \"weakpass\",\n  \"firstName\": \"Weak\",\n  \"lastName\": \"User\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "404 Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/undefined-route-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "undefined-route-test"]
             }
           },
           "response": []

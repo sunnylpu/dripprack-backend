@@ -13,35 +13,66 @@ export class ApiError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 
-  static badRequest(message = 'Bad Request', details = null) {
-    return new ApiError(400, message, 'BAD_REQUEST', details);
+  static badRequest(message = 'Bad Request', codeOrDetails = 'BAD_REQUEST', details = null) {
+    const { code, det } = ApiError._resolveCodeAndDetails('BAD_REQUEST', codeOrDetails, details);
+    return new ApiError(400, message, code, det);
   }
 
-  static unauthorized(message = 'Authentication required or invalid credentials', details = null) {
-    return new ApiError(401, message, 'UNAUTHORIZED', details);
+  static unauthorized(
+    message = 'Authentication required or invalid credentials',
+    codeOrDetails = 'UNAUTHORIZED',
+    details = null
+  ) {
+    const { code, det } = ApiError._resolveCodeAndDetails('UNAUTHORIZED', codeOrDetails, details);
+    return new ApiError(401, message, code, det);
   }
 
-  static forbidden(message = 'Access denied: insufficient permissions', details = null) {
-    return new ApiError(403, message, 'FORBIDDEN', details);
+  static forbidden(
+    message = 'Access denied: insufficient permissions',
+    codeOrDetails = 'FORBIDDEN',
+    details = null
+  ) {
+    const { code, det } = ApiError._resolveCodeAndDetails('FORBIDDEN', codeOrDetails, details);
+    return new ApiError(403, message, code, det);
   }
 
-  static notFound(message = 'Resource not found', details = null) {
-    return new ApiError(404, message, 'NOT_FOUND', details);
+  static notFound(message = 'Resource not found', codeOrDetails = 'NOT_FOUND', details = null) {
+    const { code, det } = ApiError._resolveCodeAndDetails('NOT_FOUND', codeOrDetails, details);
+    return new ApiError(404, message, code, det);
   }
 
-  static conflict(message = 'Operation conflict', details = null) {
-    return new ApiError(409, message, 'CONFLICT', details);
+  static conflict(message = 'Operation conflict', codeOrDetails = 'CONFLICT', details = null) {
+    const { code, det } = ApiError._resolveCodeAndDetails('CONFLICT', codeOrDetails, details);
+    return new ApiError(409, message, code, det);
   }
 
-  static unprocessable(message = 'Validation failed', details = null) {
-    return new ApiError(422, message, 'VALIDATION_ERROR', details);
+  static unprocessable(message = 'Validation failed', codeOrDetails = 'VALIDATION_ERROR', details = null) {
+    const { code, det } = ApiError._resolveCodeAndDetails('VALIDATION_ERROR', codeOrDetails, details);
+    return new ApiError(422, message, code, det);
   }
 
-  static tooManyRequests(message = 'Too many requests, please try again later', details = null) {
-    return new ApiError(429, message, 'RATE_LIMIT_EXCEEDED', details);
+  static tooManyRequests(
+    message = 'Too many requests, please try again later',
+    codeOrDetails = 'RATE_LIMIT_EXCEEDED',
+    details = null
+  ) {
+    const { code, det } = ApiError._resolveCodeAndDetails('RATE_LIMIT_EXCEEDED', codeOrDetails, details);
+    return new ApiError(429, message, code, det);
   }
 
-  static internal(message = 'An unexpected server error occurred', details = null) {
-    return new ApiError(500, message, 'INTERNAL_SERVER_ERROR', details);
+  static internal(
+    message = 'An unexpected server error occurred',
+    codeOrDetails = 'INTERNAL_SERVER_ERROR',
+    details = null
+  ) {
+    const { code, det } = ApiError._resolveCodeAndDetails('INTERNAL_SERVER_ERROR', codeOrDetails, details);
+    return new ApiError(500, message, code, det);
+  }
+
+  static _resolveCodeAndDetails(defaultCode, codeOrDetails, details) {
+    if (typeof codeOrDetails === 'string') {
+      return { code: codeOrDetails, det: details || null };
+    }
+    return { code: defaultCode, det: codeOrDetails || null };
   }
 }

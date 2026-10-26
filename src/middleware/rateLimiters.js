@@ -31,7 +31,8 @@ export const authLimiter = rateLimit({
   max: env.RATE_LIMIT_AUTH_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
-  handler: createRateLimitHandler('Too many authentication attempts. Please try again after 15 minutes.')
+  handler: createRateLimitHandler('Too many authentication attempts. Please try again after 15 minutes.'),
+  skip: (req) => env.NODE_ENV === 'test' && !req.headers['x-test-rate-limit']
 });
 
 /**

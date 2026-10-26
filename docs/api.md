@@ -154,3 +154,150 @@
 | `PATCH`| `/api/v1/admin/orders/:reference/status` | Bearer | `admin` | Execute controlled state transition (confirmed -> processing -> shipped) |
 | `POST` | `/api/v1/admin/orders/:reference/cancel` | Bearer | `admin` | Admin cancellation with restock guarantee |
 | `GET` | `/api/v1/admin/audit-logs` | Bearer | `admin` | Query immutable administrative audit trail |
+
+---
+
+## 5. Phase 2 Implemented Endpoint Details
+
+### 5.1 POST `/api/v1/auth/register`
+- **Access:** Public
+- **Rate Limit:** 5 requests per 15 minutes per IP
+- **Request Body:**
+  ```json
+  {
+    "email": "customer@driprack.com",
+    "password": "CustomerPassword123!",
+    "firstName": "Jane",
+    "lastName": "Doe"
+  }
+  ```
+- **Validation Rules:**
+  - `email`: Valid email format, lowercase, trimmed, max 255 chars.
+  - `password`: Min 8 chars, max 100 chars; must contain $\ge 1$ uppercase, $\ge 1$ lowercase, $\ge 1$ digit, $\ge 1$ special character.
+  - `firstName` & `lastName`: Min 2, max 50 chars.
+  - Unrecognized fields are strictly stripped (preventing mass assignment). Role is hardcoded to `customer`.
+- **Response (201 Created):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 201,
+    "message": "Account registered successfully. You may now log in.",
+    "data": {
+      "user": {
+        "_id": "6adfba6f94ba7187790e84f6",
+        "email": "customer@driprack.com",
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "role": "customer",
+        "status": "active",
+        "createdAt": "2026-10-26T20:39:11.920Z",
+        "updatedAt": "2026-10-26T20:39:11.920Z"
+      }
+    }
+  }
+  ```
+- **Error Codes:** `409 CONFLICT` (Duplicate email), `422 VALIDATION_ERROR` (Invalid format or weak password).
+
+---
+
+### 5.2 POST `/api/v1/auth/login`
+- **Access:** Public
+- **Rate Limit:** 5 requests per 15 minutes per IP
+- **Request Body:**
+  ```json
+  {
+    "email": "customer@driprack.com",
+    "password": "CustomerPassword123!"
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Authentication successful",
+    "data": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "_id": "6adfba6f94ba7187790e84f6",
+        "email": "customer@driprack.com",
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "role": "customer",
+        "status": "active"
+      }
+    }
+  }
+  ```
+- **Cookie Set:**
+  `Set-Cookie: refreshToken=<random_hex>; Path=/api/v1/auth; HttpOnly; SameSite=Lax; Max-Age=604800`
+- **Error Codes:** `401 INVALID_CREDENTIALS` (Generic error for wrong email/password), `403 ACCOUNT_SUSPENDED`, `403 ACCOUNT_DEACTIVATED`.
+
+---
+
+### 5.3 POST `/api/v1/auth/refresh`
+- **Access:** Authenticated via HttpOnly `refreshToken` cookie
+- **Protection:** CSRF Origin Verification + Token Rotation + Reuse Detection
+- **Cookie Required:** `refreshToken`
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Token refreshed successfully",
+    "data": {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "user": {
+        "_id": "6adfba6f94ba7187790e84f6",
+        "email": "customer@driprack.com",
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "role": "customer",
+        "status": "active"
+      }
+    }
+  }
+  ```
+- **Cookie Set:** Rotated fresh `refreshToken` with refreshed 7-day TTL.
+- **Error Codes:** `401 MISSING_REFRESH_TOKEN`, `401 SESSION_EXPIRED`, `401 REVOKED_SESSION_REUSE` (Replay attack triggers revocation of all user sessions), `403 CSRF_FORBIDDEN`.
+
+---
+
+### 5.4 POST `/api/v1/auth/logout`
+- **Access:** Public or Authenticated (reads `refreshToken` cookie if present)
+- **Protection:** CSRF Origin Verification
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Logged out successfully"
+  }
+  ```
+- **Cookie Cleared:** `Set-Cookie: refreshToken=; Path=/api/v1/auth; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax`
+
+---
+
+### 5.5 GET `/api/v1/auth/me`
+- **Access:** Protected by `authenticate` middleware
+- **Header:** `Authorization: Bearer <accessToken>`
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "User profile retrieved successfully",
+    "data": {
+      "user": {
+        "_id": "6adfba6f94ba7187790e84f6",
+        "email": "customer@driprack.com",
+        "firstName": "Jane",
+        "lastName": "Doe",
+        "role": "customer",
+        "status": "active"
+      }
+    }
+  }
+  ```
+- **Error Codes:** `401 UNAUTHORIZED`, `401 TOKEN_EXPIRED`, `401 TOKEN_INVALID`, `401 INVALID_TOKEN_TYPE`, `403 ACCOUNT_SUSPENDED`.
+

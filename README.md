@@ -135,10 +135,50 @@ Expected JSON response from `/api/v1`:
 
 ---
 
-## 5. Security Safeguards in Foundation (Phase 1)
+## 5. Administrator Bootstrap (Phase 2)
+
+DripRack deliberately does **not** provide a public admin registration endpoint. Initial administrator creation is accomplished via a protected, idempotent CLI script:
+
+```bash
+# Using environment variables directly:
+ADMIN_EMAIL="admin@driprack.com" ADMIN_PASSWORD="AdminPassword123!" node scripts/createAdmin.js
+
+# Or using the npm script:
+npm run seed:admin
+```
+
+### Bootstrap Safeguards:
+- **No Hardcoded Passwords:** Reads credentials from environment variables or secure terminal input.
+- **Argon2id Hashing:** Hashes passwords with Argon2id parameters before database insertion.
+- **Idempotency:** Safe to re-run. If an administrator already exists with this email, the script reports existing status and exits cleanly with code 0.
+- **Anti-Elevation Guarantee:** Refuses to silently elevate an existing customer to administrator (`role !== 'admin'`).
+- **Audit-Safe:** Credentials and password hashes are never logged.
+
+---
+
+## 6. Authentication & Session Management (Phase 2)
+
+### Endpoints:
+- `POST /api/v1/auth/register`: Customer registration (strictly assigns `customer` role, strips unrecognized inputs).
+- `POST /api/v1/auth/login`: Authenticates credentials, returns short-lived JWT access token in response body, and sets HttpOnly `refreshToken` cookie.
+- `POST /api/v1/auth/refresh`: Rotates refresh token, invalidates previous session verifier, detects reuse attacks, and issues new token pair.
+- `POST /api/v1/auth/logout`: Revokes session in database and clears the HttpOnly cookie.
+- `GET /api/v1/auth/me`: Returns authenticated customer or admin profile. Protected by `authenticate` middleware.
+
+### Browser & Cookie Security:
+- **HttpOnly Cookies:** Refresh tokens are never accessible to client-side JavaScript, mitigating XSS token theft.
+- **Strict Path Scoping:** Refresh cookie is scoped to `Path=/api/v1/auth`.
+- **SameSite Policy:** `SameSite=Strict` in production (`Lax` in development).
+- **CSRF Defense:** `verifyCsrfOrigin` middleware ensures state-changing cookie endpoints match the configured CORS allowlist.
+- **Reuse Detection:** Replaying a revoked refresh token immediately invalidates all active sessions for that user.
+
+---
+
+## 7. Security Safeguards
 - **Helmet Headers:** Automated protection against MIME sniffing, clickjacking, and XSS.
 - **Strict CORS Origin Allowlist:** Prevents unauthorized cross-origin requests.
 - **Payload Limits:** Maximum 100KB JSON payloads to mitigate Denial-of-Service (DoS).
 - **Zod Schema Validation:** Strictly strips unrecognized fields to protect against Mass Assignment.
 - **Sanitized Errors:** Internal database error messages and stack traces are suppressed in production.
 - **Log Redaction:** Passwords, tokens, cookies, and credit cards are automatically redacted in structured logs.
+
