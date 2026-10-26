@@ -301,3 +301,159 @@
   ```
 - **Error Codes:** `401 UNAUTHORIZED`, `401 TOKEN_EXPIRED`, `401 TOKEN_INVALID`, `401 INVALID_TOKEN_TYPE`, `403 ACCOUNT_SUSPENDED`.
 
+---
+
+## 6. Phase 3 Implemented Endpoint Details (Catalog & Categories)
+
+### 6.1 Categories
+
+#### `GET /api/v1/categories`
+- **Access:** Public
+- **Description:** Retrieve all active categories, alphabetically sorted by name.
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Active categories retrieved successfully",
+    "data": {
+      "categories": [
+        {
+          "_id": "6adfbe0961482ddd425c96f4",
+          "name": "Streetwear Outerwear",
+          "slug": "streetwear-outerwear",
+          "description": "Heavyweight jackets and coats",
+          "isActive": true,
+          "createdAt": "2026-10-26T20:54:33.090Z",
+          "updatedAt": "2026-10-26T20:54:33.090Z"
+        }
+      ]
+    }
+  }
+  ```
+
+#### `POST /api/v1/categories`
+- **Access:** Admin only (`authenticate, authorize('admin')`)
+- **Request Body:**
+  ```json
+  {
+    "name": "Heavyweight Hoodies",
+    "slug": "heavyweight-hoodies",
+    "description": "Premium 450gsm hoodies"
+  }
+  ```
+- **Response (201 Created):** Returns created category document.
+
+#### `PATCH /api/v1/categories/:id`
+- **Access:** Admin only
+- **Request Body:** Partial update fields (`name`, `slug`, `description`, `isActive`).
+
+#### `DELETE /api/v1/categories/:id`
+- **Access:** Admin only
+- **Description:** Soft deactivates category (`isActive: false`). Associated products are preserved but automatically hidden from public storefront views.
+
+#### `GET /api/v1/admin/categories`
+- **Access:** Admin only
+- **Query Parameters:** `page`, `limit`, `includeInactive` (boolean, default false).
+
+---
+
+### 6.2 Products
+
+#### `GET /api/v1/products`
+- **Access:** Public
+- **Visibility Invariants:** Returns only `status: 'published'` products whose category `isActive === true`.
+- **Query Parameters:**
+  - `page`: Integer (default 1)
+  - `limit`: Integer (default 20, max 100)
+  - `q`: String (search keyword across product name and description, safe regex escaped)
+  - `category`: Category ID or Category slug string
+  - `inStock`: `true` (`stock.available > 0`) or `false` (`stock.available === 0`)
+  - `sortBy`: `name:asc`, `name:desc`, `priceCents:asc`, `priceCents:desc`, `createdAt:asc`, `createdAt:desc` (default: `createdAt:desc`)
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Published products retrieved successfully",
+    "data": {
+      "products": [
+        {
+          "_id": "6adfbe1661482ddd425c970c",
+          "sku": "DRIP-HOODIE-BLK-M",
+          "slug": "heavyweight-boxy-hoodie",
+          "name": "Heavyweight Boxy Hoodie",
+          "description": "Heavyweight French Terry cotton hoodie with drop shoulders.",
+          "category": {
+            "_id": "6adfbe0961482ddd425c96f4",
+            "name": "Streetwear Outerwear",
+            "slug": "streetwear-outerwear"
+          },
+          "priceCents": 8500,
+          "compareAtPriceCents": 11000,
+          "images": ["https://images.driprack.com/hoodie-black.jpg"],
+          "status": "published",
+          "stock": {
+            "physical": 25,
+            "reserved": 0,
+            "available": 25
+          },
+          "lowStockThreshold": 5,
+          "createdAt": "2026-10-26T20:54:33.090Z",
+          "updatedAt": "2026-10-26T20:54:33.090Z"
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+  ```
+
+#### `GET /api/v1/products/:idOrSlug`
+- **Access:** Public
+- **Description:** Retrieve single product by MongoDB ObjectId or URL slug.
+- **Visibility:** Must be `status: 'published'` and have an active category. If draft, archived, or in an inactive category, returns `404 NOT_FOUND`.
+
+#### `POST /api/v1/products`
+- **Access:** Admin only
+- **Inventory Invariant:** Stock fields cannot be set; initialized to zero `{ physical: 0, reserved: 0, available: 0 }`.
+- **Initial Status:** Defaults to `draft` unless explicitly specified.
+- **Request Body:**
+  ```json
+  {
+    "sku": "DRIP-CARGO-GRN-32",
+    "name": "Relaxed Tactical Cargo Pants",
+    "description": "Reinforced ripstop cotton with articulated knee gussets.",
+    "category": "6adfbe0961482ddd425c96f4",
+    "priceCents": 9500,
+    "compareAtPriceCents": 12000,
+    "images": ["https://images.driprack.com/cargo-olive.jpg"],
+    "status": "draft",
+    "lowStockThreshold": 5
+  }
+  ```
+
+#### `PATCH /api/v1/products/:id`
+- **Access:** Admin only
+- **Inventory Invariant:** General product updates cannot mutate stock fields. Client-supplied `stock` fields are strictly ignored/stripped.
+
+#### `PATCH /api/v1/products/:id/status`
+- **Access:** Admin only
+- **Request Body:** `{ "status": "published" | "draft" | "archived" }`
+- **Transition Rule:** Publishing a product requires its category to be active; otherwise returns `409 CONFLICT`.
+
+#### `GET /api/v1/admin/products`
+- **Access:** Admin only
+- **Description:** Complete product catalog inspection across all statuses (`draft`, `published`, `archived`) and inactive categories with search, category filtering, inStock filtering, and pagination.
+
+#### `GET /api/v1/admin/products/:id`
+- **Access:** Admin only
+- **Description:** Complete product details lookup by ID, including drafts, archived items, and products in inactive categories.
+
+

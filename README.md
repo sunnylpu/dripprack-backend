@@ -174,11 +174,37 @@ npm run seed:admin
 
 ---
 
-## 7. Security Safeguards
+## 7. Product Catalog & Category Management (Phase 3)
+
+### Category Endpoints:
+- `GET /api/v1/categories`: Public listing of active categories (`isActive: true`).
+- `POST /api/v1/categories`: Administrator category creation with automatic or custom slug.
+- `PATCH /api/v1/categories/:id`: Administrator category updates.
+- `DELETE /api/v1/categories/:id`: Administrator category soft-deactivation (`isActive: false`).
+- `GET /api/v1/admin/categories`: Administrator category inspection including inactive categories and pagination.
+
+### Product Endpoints:
+- `GET /api/v1/products`: Public paginated catalog with keyword search (`q`), category filtering, availability filtering (`inStock`), and allowlisted sorting.
+- `GET /api/v1/products/:idOrSlug`: Public lookup by MongoDB ID or unique URL slug.
+- `POST /api/v1/products`: Administrator product creation (initial status defaults to `draft`, stock defaults to 0).
+- `PATCH /api/v1/products/:id`: Administrator updates to catalog fields.
+- `PATCH /api/v1/products/:id/status`: Administrator status transitions (`draft`, `published`, `archived`).
+- `GET /api/v1/admin/products`: Administrator product listing across all statuses.
+- `GET /api/v1/admin/products/:id`: Administrator detail lookup across all statuses.
+
+### Catalog Security & Invariants:
+- **Inventory Isolation Barrier:** Product creation and update endpoints strictly reject/strip client-supplied stock parameters. Stock can never be changed via general catalog updates.
+- **Storefront Visibility Rules:** Products are only visible to the public if `status === 'published'` AND their category is active (`category.isActive === true`). Draft, archived, or inactive-category products return `404 Not Found` for public clients.
+- **Category Publishing Constraint:** A product cannot transition to `published` if its assigned category is inactive.
+
+---
+
+## 8. Security Safeguards
 - **Helmet Headers:** Automated protection against MIME sniffing, clickjacking, and XSS.
 - **Strict CORS Origin Allowlist:** Prevents unauthorized cross-origin requests.
 - **Payload Limits:** Maximum 100KB JSON payloads to mitigate Denial-of-Service (DoS).
 - **Zod Schema Validation:** Strictly strips unrecognized fields to protect against Mass Assignment.
 - **Sanitized Errors:** Internal database error messages and stack traces are suppressed in production.
 - **Log Redaction:** Passwords, tokens, cookies, and credit cards are automatically redacted in structured logs.
+
 

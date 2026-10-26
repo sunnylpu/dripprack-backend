@@ -2,7 +2,7 @@
   "info": {
     "name": "DripRack API v1",
     "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
-    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 2 (Auth & RBAC)",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 3 (Catalog & Categories)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -167,20 +167,6 @@
         },
         {
           "name": "Refresh Session (Rotates Cookie)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.environment.set('accessToken', jsonData.data.accessToken);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [],
@@ -193,7 +179,7 @@
           "response": []
         },
         {
-          "name": "Logout (Revokes Session)",
+          "name": "Logout",
           "request": {
             "method": "POST",
             "header": [],
@@ -208,74 +194,260 @@
       ]
     },
     {
-      "name": "Error Cases (Foundation & Auth)",
+      "name": "Categories (Phase 3)",
       "item": [
         {
-          "name": "401 Missing Access Token",
+          "name": "Get Public Active Categories",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/auth/me",
+              "raw": "{{baseUrl}}{{apiPrefix}}/categories",
               "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "auth", "me"]
+              "path": ["{{apiPrefix}}", "categories"]
             }
           },
           "response": []
         },
         {
-          "name": "409 Duplicate Registration",
+          "name": "Admin Create Category",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"customer@driprack.com\",\n  \"password\": \"CustomerPassword123!\",\n  \"firstName\": \"Jane\",\n  \"lastName\": \"Doe\"\n}"
+              "raw": "{\n  \"name\": \"Streetwear Hoodies\",\n  \"description\": \"Oversized heavyweight fleece hoodies\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/auth/register",
+              "raw": "{{baseUrl}}{{apiPrefix}}/categories",
               "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "auth", "register"]
+              "path": ["{{apiPrefix}}", "categories"]
             }
           },
           "response": []
         },
         {
-          "name": "422 Weak Password Registration",
+          "name": "Admin Update Category",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description for premium collection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "categories", "{{categoryId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Deactivate Category",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/categories/{{categoryId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "categories", "{{categoryId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin List All Categories (with inactive)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/categories?includeInactive=true&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "categories"],
+              "query": [
+                { "key": "includeInactive", "value": "true" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Products (Phase 3)",
+      "item": [
+        {
+          "name": "Get Public Published Products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/products?page=1&limit=20&sortBy=priceCents:asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "sortBy", "value": "priceCents:asc" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Public Product by Slug or ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/products/heavyweight-boxy-hoodie",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "products", "heavyweight-boxy-hoodie"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Create Product (Draft)",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"weak@driprack.com\",\n  \"password\": \"weakpass\",\n  \"firstName\": \"Weak\",\n  \"lastName\": \"User\"\n}"
+              "raw": "{\n  \"sku\": \"DRIP-HOODIE-BLK-M\",\n  \"name\": \"Heavyweight Boxy Hoodie\",\n  \"description\": \"Heavyweight French Terry cotton hoodie with drop shoulders.\",\n  \"category\": \"{{categoryId}}\",\n  \"priceCents\": 8500,\n  \"compareAtPriceCents\": 11000,\n  \"images\": [\"https://images.driprack.com/hoodie-black.jpg\"]\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/auth/register",
+              "raw": "{{baseUrl}}{{apiPrefix}}/products",
               "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "auth", "register"]
+              "path": ["{{apiPrefix}}", "products"]
             }
           },
           "response": []
         },
         {
-          "name": "404 Not Found",
+          "name": "Admin Update Product Catalog",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceCents\": 9000,\n  \"compareAtPriceCents\": 11500\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "products", "{{productId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Update Product Status (Publish/Archive)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"published\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/products/{{productId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "products", "{{productId}}", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin List All Products (All Statuses)",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
             "url": {
-              "raw": "{{baseUrl}}{{apiPrefix}}/undefined-route-test",
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/products?page=1&limit=20",
               "host": ["{{baseUrl}}"],
-              "path": ["{{apiPrefix}}", "undefined-route-test"]
+              "path": ["{{apiPrefix}}", "admin", "products"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Get Product Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "products", "{{productId}}"]
             }
           },
           "response": []
