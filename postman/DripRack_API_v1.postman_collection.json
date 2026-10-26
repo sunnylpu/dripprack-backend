@@ -1,0 +1,120 @@
+{
+  "info": {
+    "name": "DripRack API v1",
+    "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "Liveness Probe (Direct)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Probe (Direct)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "ready"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Base API Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Liveness Probe (API Prefix)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "health", "live"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Readiness Probe (API Prefix)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/health/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "health", "ready"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Error Cases (Foundation)",
+      "item": [
+        {
+          "name": "404 Not Found",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/undefined-route-test",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "undefined-route-test"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "400 Malformed JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"malformed\": json syntax error "
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "health", "live"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
