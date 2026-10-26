@@ -33,10 +33,13 @@ export const categoryService = {
 
   /**
    * Get single category by ID
+   * @param {string} id - Category ObjectId
+   * @param {object} [options]
+   * @param {boolean} [options.onlyActive=false] - If true, throws 404 if category is inactive
    */
-  async getCategoryById(id) {
+  async getCategoryById(id, { onlyActive = false } = {}) {
     const category = await Category.findById(id);
-    if (!category) {
+    if (!category || (onlyActive && !category.isActive)) {
       throw ApiError.notFound('Category not found');
     }
     return category;

@@ -132,23 +132,28 @@ Provides an append-only, tamper-evident audit trail for every single stock chang
 | :--- | :--- | :--- | :--- |
 | `_id` | ObjectId | Yes | Auto Primary Key |
 | `product` | ObjectId | Yes | Ref to `Product`, indexed |
-| `sku` | String | Yes | Product SKU snapshot |
+| `sku` | String | Yes | Product SKU snapshot at adjustment time |
 | `movementType` | String | Yes | Enum: `['adjustment', 'reservation', 'release', 'sale', 'restock']` |
 | `quantityDelta` | Number | Yes | Signed integer (positive or negative change) |
-| `previousPhysical` | Number | Yes | Physical quantity before mutation |
-| `newPhysical` | Number | Yes | Physical quantity after mutation |
-| `previousAvailable`| Number | Yes | Available quantity before mutation |
-| `newAvailable` | Number | Yes | Available quantity after mutation |
+| `previousPhysical` | Number | Yes | Physical quantity before mutation (Integer, $\ge 0$) |
+| `newPhysical` | Number | Yes | Physical quantity after mutation (Integer, $\ge 0$) |
+| `previousAvailable`| Number | Yes | Available quantity before mutation (Integer, $\ge 0$) |
+| `newAvailable` | Number | Yes | Available quantity after mutation (Integer, $\ge 0$) |
 | `actor` | ObjectId | Yes | Ref to `User` performing the action |
-| `actorRole` | String | Yes | `admin`, `customer`, or `system` |
+| `actorRole` | String | Yes | Enum: `['admin', 'customer', 'system']` |
 | `orderReference` | String | No | Linked order reference if movement is order-related |
-| `reason` | String | Yes | Mandatory explanation (e.g. "Order ORD-1234 reservation", "Warehouse audit restock") |
+| `reason` | String | Yes | Mandatory explanation (Min 3, max 500 chars) |
+| `idempotencyKey` | String | No | Optional key passed by client in header for adjustment deduplication |
+| `idempotencyPayloadHash` | String | No | SHA-256 hash of `{ productId, quantityDelta, reason }` |
 | `createdAt` | Date | Yes | Timestamp |
+| `updatedAt` | Date | Yes | Timestamp |
 
 **Indexes:**
-- `{ product: 1, createdAt: -1 }`
-- `{ orderReference: 1 }`
-- `{ movementType: 1 }`
+- `{ product: 1, createdAt: -1 }` (Product movement history)
+- `{ movementType: 1, createdAt: -1 }` (Movement type filtering)
+- `{ actor: 1, createdAt: -1 }` (Auditing administrator actions)
+- `{ orderReference: 1 }` (Sparse, for order-linked movements)
+- `{ idempotencyKey: 1 }` (Unique with `partialFilterExpression: { idempotencyKey: { $type: "string" } }` for deduplication)
 
 ---
 

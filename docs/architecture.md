@@ -172,39 +172,79 @@ stateDiagram-v2
 
 ---
 
-## 5. Stock Consistency & Concurrency Design
+---
 
-E-commerce inventory requires zero overselling under race conditions.
+## 5. Stock Consistency, Concurrency & Inventory Architecture (Phase 4)
 
-### Formula:
+E-commerce inventory requires zero overselling under race conditions, integer-only stock counts, and append-only audit tracking.
+
+### 5.1 Stock Invariant
+The Product model remains the single source of truth for real-time stock levels:
 $$\text{Available Stock} = \text{Physical Quantity} - \text{Reserved Quantity}$$
 
-### Consistency Rules:
-1. **Never mutate stock via generic product updates:** Product description or pricing edits cannot alter quantity fields.
-2. **Atomic conditional stock updates:**
-   ```javascript
-   // Reserving stock for order placement
-   const result = await Product.updateOne(
-     { _id: productId, "stock.available": { $gte: requestedQty } },
-     { 
-       $inc: { 
-         "stock.reserved": requestedQty,
-         "stock.available": -requestedQty
-       } 
-     },
-     { session }
-   );
-   if (result.matchedCount === 0) {
-     throw new ApiError(409, `Insufficient stock for product ${productId}`);
-   }
-   ```
-3. **MongoDB Multi-Document ACID Transactions:** Checkout operations span:
-   - Product stock reservation/decrement.
-   - Order creation.
-   - Cart clearing.
-   - InventoryMovement log insertion.
-   All executed inside `withTransaction()` session. If any operation fails, the entire transaction rolls back.
-4. **Idempotent Movement Logging:** Every change produces an immutable `InventoryMovement` entry with `movementType` (`reservation`, `release`, `sale`, `adjustment`, `restock`), before/after snapshots, and an actor reference.
+### Required System Invariants:
+1. All stock quantities are non-negative integers ($\text{physical} \ge 0, \text{reserved} \ge 0, \text{available} \ge 0$).
+2. Reserved stock cannot exceed physical stock ($\text{reserved} \le \text{physical}$).
+3. Available stock must strictly equal physical minus reserved ($\text{available} = \text{physical} - \text{reserved}$).
+4. New products start with zero stock (`{ physical: 0, reserved: 0, available: 0 }`).
+5. The Inventory Service is the **only** application service authorized to mutate stock. General catalog create/update/status endpoints reject or strip all stock modifications.
+
+### 5.2 Atomic Stock Adjustments & Transaction Safety
+Every stock adjustment executes inside a MongoDB multi-document ACID transaction:
+```javascript
+// Negative stock adjustment atomically enforcing available stock condition
+const updatedProduct = await Product.findOneAndUpdate(
+  {
+    _id: productId,
+    "stock.available": { $gte: Math.abs(quantityDelta) } // Enforces non-negativity and reservation buffer atomically
+  },
+  { 
+    $inc: { 
+      "stock.physical": quantityDelta,
+      "stock.available": quantityDelta
+    } 
+  },
+  { session, new: true }
+);
+
+if (!updatedProduct) {
+  throw ApiError.conflict('Stock update conflict or insufficient available stock', 'STOCK_UPDATE_CONFLICT');
+}
+
+// Append-only audit record created in the same transaction
+await InventoryMovement.create(
+  [
+    {
+      product: updatedProduct._id,
+      sku: product.sku, // Immutable SKU snapshot
+      movementType: 'adjustment',
+      quantityDelta,
+      previousPhysical: product.stock.physical,
+      newPhysical: updatedProduct.stock.physical,
+      previousAvailable: product.stock.available,
+      newAvailable: updatedProduct.stock.available,
+      actor: actorId,
+      actorRole: 'admin',
+      reason: reason.trim(),
+      idempotencyKey: idempotencyKey || null,
+      idempotencyPayloadHash: idempotencyKey ? payloadHash : null
+    }
+  ],
+  { session }
+);
+```
+
+### 5.3 Idempotency Strategy
+- **Header:** `Idempotency-Key` (up to 128 chars).
+- **Index:** Enforced at database level via `{ idempotencyKey: 1 }` with `partialFilterExpression: { idempotencyKey: { $type: "string" } }` on `inventory_movements`.
+- **Payload Hash:** SHA-256 hash of `{ productId, quantityDelta, reason }`.
+- **Replay Behavior:**
+  - Matching key + matching hash: Safely returns existing movement and current product (200 OK) without double adjustment.
+  - Matching key + mismatched hash: Rejected immediately with `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+  - Concurrent requests with identical key: Database unique constraint halts duplicate execution, and the service transparently resolves the replay.
+
+### 5.4 Audit Trail Immutability
+`InventoryMovement` documents are strictly append-only. No edit, update, or delete routes are exposed anywhere in the API. Snapshot SKUs preserve historical fidelity even if an administrator renames a product SKU in future catalog updates.
 
 ---
 

@@ -11,6 +11,9 @@ import { ApiError } from '../utils/ApiError.js';
 export function validateRequest(schemas) {
   return async (req, res, next) => {
     try {
+      if (schemas.headers) {
+        req.headers = await schemas.headers.parseAsync(req.headers);
+      }
       if (schemas.params) {
         req.params = await schemas.params.parseAsync(req.params);
       }

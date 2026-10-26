@@ -31,18 +31,44 @@ The DripRack testing suite ensures that all business constraints, security contr
 | **AC-14** | Refresh token rotation | Using a refresh token yields a new token pair and invalidates the previous refresh session. Replaying old token revokes all user sessions. |
 | **AC-15** | Rate limiting & Error sanitization | Exceeding 5 login attempts within 15 minutes returns `429 Too Many Requests`. 500 errors omit stack traces in non-development modes. |
 | **AC-16** | Zero secret exposure | Logs, API responses, and database queries for public profiles never contain `passwordHash`, `refreshToken`, or reset tokens. |
+| **AC-17** | Inventory Role Restriction | Guests accessing `/api/v1/inventory/*` receive `401 Unauthorized`; customers receive `403 Forbidden`. Only admins succeed. |
+| **AC-18** | Stock Invariant & Integer Validation | $\text{available} = \text{physical} - \text{reserved}$ enforced. Non-integer, fractional, or negative values rejected. |
+| **AC-19** | Transactional Stock & Movement Atomicity | Product stock increment and `InventoryMovement` creation succeed or fail together in a MongoDB multi-document transaction. |
+| **AC-20** | Insufficient Stock Conflict | Attempting to reduce stock below available buffer returns `409 Conflict` (`INSUFFICIENT_STOCK`). Reserved units are never reduced via manual adjustments. |
+| **AC-21** | Stock Adjustment Idempotency | Resending identical `Idempotency-Key` header with identical payload returns `200 OK` without double incrementing. Reusing key with different payload returns `409 Conflict`. |
+| **AC-22** | SKU Snapshotting & Immutability | Audit movements capture SKU snapshot at mutation time. Movements cannot be modified or deleted via the API (404 on PATCH/DELETE). |
+| **AC-23** | Low-Stock Reporting | `GET /api/v1/inventory/low-stock` accurately includes products with `stock.available <= lowStockThreshold` (including 0 stock items). |
+| **AC-24** | Public Category Lookup Regression | Public `GET /api/v1/categories/:id` returns `404 Not Found` for deactivated categories. |
 
 ---
 
-## 3. Test Execution Commands
+## 3. Transactional Test Environment
+
+Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
+```javascript
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
+
+beforeAll(async () => {
+  replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+  await connectDB(replSet.getUri());
+});
+```
+
+---
+
+## 4. Test Execution & Inventory Audit Commands
 
 ```bash
-# Run unit & integration test suites
+# Run complete test suite (all phases)
 npm test
+
+# Run inventory module tests specifically
+npx vitest run tests/inventory.test.js
+
+# Run read-only inventory integrity audit script on database
+node scripts/auditInventoryIntegrity.js
 
 # Run tests with coverage report
 npm run test:coverage
-
-# Run tests in watch mode during development
-npm run test:watch
 ```
+

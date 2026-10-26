@@ -332,6 +332,11 @@
   }
   ```
 
+#### `GET /api/v1/categories/:id`
+- **Access:** Public
+- **Description:** Retrieve single category by ID.
+- **Visibility:** Only active categories (`isActive === true`) are returned to public clients. Inactive categories return `404 NOT_FOUND`.
+
 #### `POST /api/v1/categories`
 - **Access:** Admin only (`authenticate, authorize('admin')`)
 - **Request Body:**
@@ -370,50 +375,6 @@
   - `category`: Category ID or Category slug string
   - `inStock`: `true` (`stock.available > 0`) or `false` (`stock.available === 0`)
   - `sortBy`: `name:asc`, `name:desc`, `priceCents:asc`, `priceCents:desc`, `createdAt:asc`, `createdAt:desc` (default: `createdAt:desc`)
-- **Response (200 OK):**
-  ```json
-  {
-    "success": true,
-    "statusCode": 200,
-    "message": "Published products retrieved successfully",
-    "data": {
-      "products": [
-        {
-          "_id": "6adfbe1661482ddd425c970c",
-          "sku": "DRIP-HOODIE-BLK-M",
-          "slug": "heavyweight-boxy-hoodie",
-          "name": "Heavyweight Boxy Hoodie",
-          "description": "Heavyweight French Terry cotton hoodie with drop shoulders.",
-          "category": {
-            "_id": "6adfbe0961482ddd425c96f4",
-            "name": "Streetwear Outerwear",
-            "slug": "streetwear-outerwear"
-          },
-          "priceCents": 8500,
-          "compareAtPriceCents": 11000,
-          "images": ["https://images.driprack.com/hoodie-black.jpg"],
-          "status": "published",
-          "stock": {
-            "physical": 25,
-            "reserved": 0,
-            "available": 25
-          },
-          "lowStockThreshold": 5,
-          "createdAt": "2026-10-26T20:54:33.090Z",
-          "updatedAt": "2026-10-26T20:54:33.090Z"
-        }
-      ]
-    },
-    "meta": {
-      "page": 1,
-      "limit": 20,
-      "total": 1,
-      "totalPages": 1,
-      "hasNextPage": false,
-      "hasPrevPage": false
-    }
-  }
-  ```
 
 #### `GET /api/v1/products/:idOrSlug`
 - **Access:** Public
@@ -424,20 +385,6 @@
 - **Access:** Admin only
 - **Inventory Invariant:** Stock fields cannot be set; initialized to zero `{ physical: 0, reserved: 0, available: 0 }`.
 - **Initial Status:** Defaults to `draft` unless explicitly specified.
-- **Request Body:**
-  ```json
-  {
-    "sku": "DRIP-CARGO-GRN-32",
-    "name": "Relaxed Tactical Cargo Pants",
-    "description": "Reinforced ripstop cotton with articulated knee gussets.",
-    "category": "6adfbe0961482ddd425c96f4",
-    "priceCents": 9500,
-    "compareAtPriceCents": 12000,
-    "images": ["https://images.driprack.com/cargo-olive.jpg"],
-    "status": "draft",
-    "lowStockThreshold": 5
-  }
-  ```
 
 #### `PATCH /api/v1/products/:id`
 - **Access:** Admin only
@@ -455,5 +402,206 @@
 #### `GET /api/v1/admin/products/:id`
 - **Access:** Admin only
 - **Description:** Complete product details lookup by ID, including drafts, archived items, and products in inactive categories.
+
+---
+
+## 7. Phase 4 Implemented Endpoint Details (Inventory & Stock Management)
+
+All inventory endpoints require `authenticate` and `authorize('admin')`. Guests receive `401 Unauthorized`; customers receive `403 Forbidden`.
+
+### 7.1 POST `/api/v1/inventory/adjust`
+- **Access:** Admin only
+- **Description:** Atomically adjust product physical and available stock with transaction safety, automatic invariant preservation, and immutable movement audit logging.
+- **Headers:**
+  - `Authorization: Bearer <adminAccessToken>` (Required)
+  - `Idempotency-Key: <unique-string>` (Optional, max 128 characters)
+- **Request Body:**
+  ```json
+  {
+    "productId": "6adfbe1661482ddd425c970c",
+    "quantityDelta": 15,
+    "reason": "New supplier batch received"
+  }
+  ```
+  *(To deduct damaged inventory: set `"quantityDelta": -3`)*
+- **Validation Constraints:**
+  - `productId`: Valid 24-character hexadecimal ObjectId.
+  - `quantityDelta`: Nonzero signed integer between -100,000 and 100,000.
+  - `reason`: Required string, trimmed, 3 to 500 characters.
+  - Strict payload validation: Unexpected fields (such as client-supplied stock counts or spoofed actor IDs) are rejected with `422 VALIDATION_ERROR`.
+- **Business & Consistency Rules:**
+  - Available stock invariant: $\text{available} = \text{physical} - \text{reserved}$.
+  - Reserved stock is never altered during manual adjustments.
+  - Negative adjustments require $\text{available} \ge |\text{quantityDelta}|$. If insufficient removable stock exists, returns `409 Conflict` (`INSUFFICIENT_STOCK`).
+- **Idempotency Behavior:**
+  - Repeating the request with the identical key and identical payload returns the previously recorded movement and current stock with `200 OK` (`isIdempotentReplay: true`).
+  - Reusing a key with a different payload returns `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Stock adjusted successfully",
+    "data": {
+      "product": {
+        "_id": "6adfbe1661482ddd425c970c",
+        "sku": "DRIP-HOODIE-BLK-M",
+        "name": "Heavyweight Boxy Hoodie",
+        "stock": {
+          "physical": 40,
+          "reserved": 0,
+          "available": 40
+        },
+        "lowStockThreshold": 5
+      },
+      "movement": {
+        "_id": "6adfc8a1b94ea1f238ab9102",
+        "product": "6adfbe1661482ddd425c970c",
+        "sku": "DRIP-HOODIE-BLK-M",
+        "movementType": "adjustment",
+        "quantityDelta": 15,
+        "previousPhysical": 25,
+        "newPhysical": 40,
+        "previousAvailable": 25,
+        "newAvailable": 40,
+        "actor": {
+          "_id": "6adfba6f94ba7187790e84f0",
+          "firstName": "Admin",
+          "lastName": "User",
+          "email": "admin@driprack.com",
+          "role": "admin"
+        },
+        "actorRole": "admin",
+        "reason": "New supplier batch received",
+        "createdAt": "2026-10-27T02:35:10.120Z"
+      }
+    }
+  }
+  ```
+
+---
+
+### 7.2 GET `/api/v1/inventory/stock`
+- **Access:** Admin only
+- **Description:** Paginated catalog stock overview with real-time computed `isLowStock` boolean flag.
+- **Query Parameters:**
+  - `page`: Integer (default 1)
+  - `limit`: Integer (default 20, max 100)
+  - `q`: Search keyword (matched against product name or SKU)
+  - `category`: Category ID or Category slug
+  - `inStock`: `true` or `false`
+  - `lowStockOnly`: `true` (filters products where `stock.available <= lowStockThreshold`)
+  - `sortBy`: `sku:asc`, `sku:desc`, `name:asc`, `name:desc`, `physical:asc`, `physical:desc`, `available:asc`, `available:desc`, `createdAt:asc`, `createdAt:desc` (default: `createdAt:desc`)
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Inventory stock levels retrieved successfully",
+    "data": {
+      "stock": [
+        {
+          "_id": "6adfbe1661482ddd425c970c",
+          "sku": "DRIP-HOODIE-BLK-M",
+          "name": "Heavyweight Boxy Hoodie",
+          "slug": "heavyweight-boxy-hoodie",
+          "status": "published",
+          "category": {
+            "_id": "6adfbe0961482ddd425c96f4",
+            "name": "Streetwear Outerwear"
+          },
+          "stock": {
+            "physical": 4,
+            "reserved": 0,
+            "available": 4
+          },
+          "lowStockThreshold": 5,
+          "isLowStock": true,
+          "createdAt": "2026-10-26T20:54:33.090Z",
+          "updatedAt": "2026-10-27T02:35:10.120Z"
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+  ```
+
+---
+
+### 7.3 GET `/api/v1/inventory/low-stock`
+- **Access:** Admin only
+- **Description:** Focused inventory report listing all products currently requiring replenishment (`stock.available <= lowStockThreshold`). Products with 0 available units qualify under this definition.
+- **Query Parameters:** `page`, `limit`, `q`, `category`, `sortBy`.
+- **Response (200 OK):** Returns low-stock items with `isLowStock: true` and computed `unitsBelowThreshold`.
+
+---
+
+### 7.4 GET `/api/v1/inventory/movements`
+- **Access:** Admin only
+- **Description:** Append-only, immutable inventory movement audit log detailing all stock mutations across the store.
+- **Immutability Guarantee:** No routes exist to edit, update, or delete movement records.
+- **Query Parameters:**
+  - `page`: Integer (default 1)
+  - `limit`: Integer (default 20, max 100)
+  - `productId`: Filter by specific Product ObjectId
+  - `movementType`: `adjustment`, `reservation`, `release`, `sale`, `restock`
+  - `actor`: Filter by admin user ObjectId
+  - `startDate`: ISO 8601 date string
+  - `endDate`: ISO 8601 date string (validated: `startDate <= endDate`)
+  - `sortBy`: `createdAt:desc`, `createdAt:asc` (default: `createdAt:desc`)
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Inventory movements retrieved successfully",
+    "data": {
+      "movements": [
+        {
+          "_id": "6adfc8a1b94ea1f238ab9102",
+          "product": {
+            "_id": "6adfbe1661482ddd425c970c",
+            "name": "Heavyweight Boxy Hoodie",
+            "slug": "heavyweight-boxy-hoodie",
+            "sku": "DRIP-HOODIE-BLK-M"
+          },
+          "sku": "DRIP-HOODIE-BLK-M",
+          "movementType": "adjustment",
+          "quantityDelta": 15,
+          "previousPhysical": 25,
+          "newPhysical": 40,
+          "previousAvailable": 25,
+          "newAvailable": 40,
+          "actor": {
+            "_id": "6adfba6f94ba7187790e84f0",
+            "firstName": "Admin",
+            "lastName": "User",
+            "email": "admin@driprack.com",
+            "role": "admin"
+          },
+          "actorRole": "admin",
+          "reason": "New supplier batch received",
+          "createdAt": "2026-10-27T02:35:10.120Z"
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+  ```
+
 
 

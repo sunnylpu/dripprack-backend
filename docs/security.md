@@ -115,3 +115,36 @@ redact: {
 }
 ```
 Every incoming HTTP request generates or propagates an `X-Request-Id` UUID header, which is tagged on all logs for end-to-end traceability.
+
+---
+
+## 6. Inventory & Stock Security Controls (Phase 4)
+
+1. **Strict Admin-Only Authorization:**
+   - Every route mounted under `/api/v1/inventory` requires both `authenticate` and `authorize('admin')` middleware.
+   - Unauthenticated requests return `401 Unauthorized`.
+   - Customer-role users or tampered tokens return `403 Forbidden` (`FORBIDDEN`).
+
+2. **Trusted Actor Derivation (Anti-Spoofing):**
+   - The actor ID and actor role recorded on each `InventoryMovement` are derived strictly from the server-validated session (`req.user._id`, `req.user.role`).
+   - Any client-supplied actor fields are stripped by schema validation and rejected.
+
+3. **Mass-Assignment & Tampering Prevention:**
+   - Product stock fields (`physical`, `reserved`, `available`) cannot be modified via general catalog create (`POST /products`) or update (`PATCH /products/:id`) endpoints.
+   - Initial stock on product creation is strictly hardcoded to zero (`{ physical: 0, reserved: 0, available: 0 }`).
+   - The adjustment schema (`adjustStockSchema`) uses `.strict()`, rejecting payloads that attempt to inject direct stock counts or bypass business rules.
+
+4. **Race-Condition & Overselling Protection:**
+   - Negative adjustments enforce stock availability at the atomic database engine level (`{ 'stock.available': { $gte: Math.abs(quantityDelta) } }`) rather than relying on stale application-level reads.
+   - Multi-document transactions (`session.withTransaction`) ensure that stock updates and audit movements succeed or fail atomically.
+
+5. **Idempotency Protection Against Replay Attacks:**
+   - Stock adjustments support the `Idempotency-Key` header with database-enforced uniqueness via `partialFilterExpression: { idempotencyKey: { $type: "string" } }`.
+   - Replays with identical payload hashes return the existing movement safely without mutating stock a second time.
+   - Key collisions with modified payloads are rejected with `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
+
+6. **Audit Trail Immutability:**
+   - `inventory_movements` collection is strictly append-only through the API.
+   - No `PATCH`, `PUT`, or `DELETE` endpoints exist for movement logs.
+   - Snapshot SKUs preserve original SKU values across subsequent catalog updates.
+

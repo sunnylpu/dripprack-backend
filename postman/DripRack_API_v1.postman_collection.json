@@ -2,7 +2,7 @@
   "info": {
     "name": "DripRack API v1",
     "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
-    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 3 (Catalog & Categories)",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 4 (Inventory & Stock Management)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -448,6 +448,209 @@
               "raw": "{{baseUrl}}{{apiPrefix}}/admin/products/{{productId}}",
               "host": ["{{baseUrl}}"],
               "path": ["{{apiPrefix}}", "admin", "products", "{{productId}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Inventory & Stock Management (Phase 4)",
+      "item": [
+        {
+          "name": "Admin List Stock (All Products)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/stock?page=1&limit=20&sortBy=available:asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "stock"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "sortBy", "value": "available:asc" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin List Low-Stock Products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/low-stock?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "low-stock"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Positive Stock Adjustment (Restock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idem-key-batch-001"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantityDelta\": 25,\n  \"reason\": \"Warehouse delivery received from supplier\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "adjust"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Negative Stock Adjustment (Damaged / Removal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantityDelta\": -3,\n  \"reason\": \"Units damaged during quality inspection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "adjust"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Invalid Stock Adjustment (Zero Delta - 422 Error)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantityDelta\": 0,\n  \"reason\": \"Invalid zero adjustment attempt\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "adjust"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Duplicate Idempotency Key (409 Conflict Test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idem-key-batch-001"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantityDelta\": 50,\n  \"reason\": \"Attempting different quantity with reused key\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/adjust",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "adjust"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Inventory Movement History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/movements?page=1&limit=20&sortBy=createdAt:desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "movements"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" },
+                { "key": "sortBy", "value": "createdAt:desc" }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Customer Permission Denial (403 Forbidden)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/inventory/stock",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "inventory", "stock"]
             }
           },
           "response": []

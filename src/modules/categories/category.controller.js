@@ -27,10 +27,10 @@ export const categoryController = {
   }),
 
   /**
-   * Get single category by ID
+   * Get single category by ID (public endpoint - active categories only)
    */
   getCategoryById: asyncHandler(async (req, res) => {
-    const category = await categoryService.getCategoryById(req.params.id);
+    const category = await categoryService.getCategoryById(req.params.id, { onlyActive: true });
     return ApiResponse.success(res, {
       message: 'Category retrieved successfully',
       data: { category }

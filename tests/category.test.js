@@ -83,10 +83,43 @@ describe('Phase 3: Category Management Test Suite', () => {
       expect(slugs).not.toContain('archived-collection');
     });
 
-    it('should return 404 for invalid ObjectId on single category read', async () => {
+    it('should return 422 for invalid ObjectId on single category read', async () => {
       const res = await request(app).get('/api/v1/categories/invalid-id-format');
       expect(res.status).toBe(422);
       expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('should return 200 for active category by valid ID', async () => {
+      const activeCat = await Category.create({
+        name: 'Active Category Detail',
+        slug: 'active-category-detail',
+        isActive: true
+      });
+
+      const res = await request(app).get(`/api/v1/categories/${activeCat._id}`);
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.category.name).toBe('Active Category Detail');
+    });
+
+    it('should return 404 for inactive category on public lookup (regression fix)', async () => {
+      const inactiveCat = await Category.create({
+        name: 'Hidden Inactive Category',
+        slug: 'hidden-inactive-category',
+        isActive: false
+      });
+
+      const res = await request(app).get(`/api/v1/categories/${inactiveCat._id}`);
+      expect(res.status).toBe(404);
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('NOT_FOUND');
+    });
+
+    it('should return 404 for nonexistent category ID', async () => {
+      const fakeId = '507f1f77bcf86cd799439011';
+      const res = await request(app).get(`/api/v1/categories/${fakeId}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe('NOT_FOUND');
     });
   });
 

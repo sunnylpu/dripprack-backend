@@ -199,12 +199,33 @@ npm run seed:admin
 
 ---
 
-## 8. Security Safeguards
+## 8. Inventory & Stock Management (Phase 4)
+
+All inventory endpoints require `authenticate` and `authorize('admin')`.
+
+### Inventory Endpoints:
+- `POST /api/v1/inventory/adjust`: Atomic physical and available stock adjustment. Supports positive and negative integer deltas, mandatory audit reasons, transaction safety, and optional `Idempotency-Key` header.
+- `GET /api/v1/inventory/stock`: Administrator catalog stock levels with real-time `isLowStock` flags, category/search/low-stock filtering, and allowlisted sorting.
+- `GET /api/v1/inventory/low-stock`: Report listing products currently at or below their configured `lowStockThreshold` (`stock.available <= lowStockThreshold`).
+- `GET /api/v1/inventory/movements`: Immutable append-only audit trail with filtering by product, actor, movement type, and date range.
+
+### Invariants & Transaction Guarantees:
+- **Stock Invariant:** Real-time stock strictly satisfies $\text{available} = \text{physical} - \text{reserved}$ with integer validation and $\text{physical} \ge 0, \text{reserved} \ge 0, \text{available} \ge 0, \text{reserved} \le \text{physical}$.
+- **Atomic Concurrency:** Negative adjustments conditionally enforce $\text{available} \ge |\text{quantityDelta}|$ at the database query level.
+- **ACID Transactions:** Product stock updates and `InventoryMovement` insertions are bound to a MongoDB session; if movement creation fails, the stock change automatically rolls back.
+- **Idempotency Deduplication:** The `Idempotency-Key` header guarantees safe network retries. Replaying the identical key with matching payload hash returns the original movement without double adjustment; collisions with different payloads return `409 Conflict`.
+- **SKU Snapshotting:** Movements record an immutable SKU snapshot at adjustment time to preserve historical fidelity if products are renamed.
+- **Read-Only Audit Script:** Run `node scripts/auditInventoryIntegrity.js` to inspect catalog inventory integrity against invariants without mutating production data.
+
+---
+
+## 9. Security Safeguards
 - **Helmet Headers:** Automated protection against MIME sniffing, clickjacking, and XSS.
 - **Strict CORS Origin Allowlist:** Prevents unauthorized cross-origin requests.
 - **Payload Limits:** Maximum 100KB JSON payloads to mitigate Denial-of-Service (DoS).
-- **Zod Schema Validation:** Strictly strips unrecognized fields to protect against Mass Assignment.
+- **Zod Schema Validation:** Strictly strips or rejects unrecognized fields to protect against Mass Assignment.
 - **Sanitized Errors:** Internal database error messages and stack traces are suppressed in production.
 - **Log Redaction:** Passwords, tokens, cookies, and credit cards are automatically redacted in structured logs.
+
 
 

@@ -65,23 +65,39 @@ const productSchema = new mongoose.Schema(
       physical: {
         type: Number,
         default: 0,
-        min: [0, 'Physical stock cannot be negative']
+        min: [0, 'Physical stock cannot be negative'],
+        validate: {
+          validator: Number.isInteger,
+          message: 'Physical stock must be an integer'
+        }
       },
       reserved: {
         type: Number,
         default: 0,
-        min: [0, 'Reserved stock cannot be negative']
+        min: [0, 'Reserved stock cannot be negative'],
+        validate: {
+          validator: Number.isInteger,
+          message: 'Reserved stock must be an integer'
+        }
       },
       available: {
         type: Number,
         default: 0,
-        min: [0, 'Available stock cannot be negative']
+        min: [0, 'Available stock cannot be negative'],
+        validate: {
+          validator: Number.isInteger,
+          message: 'Available stock must be an integer'
+        }
       }
     },
     lowStockThreshold: {
       type: Number,
       default: 5,
-      min: [0, 'Low stock threshold cannot be negative']
+      min: [0, 'Low stock threshold cannot be negative'],
+      validate: {
+        validator: Number.isInteger,
+        message: 'Low stock threshold must be an integer'
+      }
     }
   },
   {
@@ -101,10 +117,24 @@ const productSchema = new mongoose.Schema(
   }
 );
 
+// Consistency validation hook
+productSchema.pre('validate', function (next) {
+  if (this.stock) {
+    if (this.stock.reserved > this.stock.physical) {
+      this.invalidate('stock.reserved', 'Reserved stock cannot exceed physical stock');
+    }
+    if (this.stock.available !== this.stock.physical - this.stock.reserved) {
+      this.invalidate('stock.available', 'Available stock must equal physical stock minus reserved stock');
+    }
+  }
+  next();
+});
+
 // Indexes
 productSchema.index({ sku: 1 }, { unique: true });
 productSchema.index({ slug: 1 }, { unique: true });
 productSchema.index({ status: 1, category: 1, 'stock.available': 1 });
+productSchema.index({ 'stock.available': 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ name: 'text', description: 'text' });
 
