@@ -347,7 +347,58 @@ Order placement coordinates all critical business state changes inside a MongoDB
 
 ---
 
-## 8. Unresolved Decisions & Safe Defaults
+## 8. Admin Order Fulfillment, Dashboard & Append-Only Audit Logging (Phase 7)
+
+### 8.1 Fulfillment State Machine
+Orders follow a strict deterministic lifecycle:
+```mermaid
+stateDiagram-v2
+    [*] --> awaiting_payment : Online Checkout Placed
+    [*] --> confirmed : COD Checkout Placed
+    awaiting_payment --> confirmed : Webhook Payment Succeeded
+    awaiting_payment --> cancelled : Customer / Admin Cancel / Gateway Failed
+    confirmed --> processing : Admin Fulfillment Started
+    confirmed --> cancelled : Customer / Admin Cancel (Pre-dispatch)
+    processing --> shipped : Admin Dispatch (HTTPS Tracking Recorded)
+    processing --> cancelled : Admin Cancel (Pre-dispatch Restock)
+    shipped --> delivered : Delivery Confirmed (COD Payment Collected)
+    delivered --> [*]
+    cancelled --> [*]
+```
+
+### 8.2 Inventory Conversion at Dispatch
+1. **Reservation to Sale Transition:** When transitioning from `processing` to `shipped`:
+   - `stock.physical` decrements by order quantity.
+   - `stock.reserved` decrements by order quantity.
+   - `stock.available` remains invariant ($\Delta\text{available} = 0$).
+   - Appends `'sale'` `InventoryMovement` entries capturing before/after physical and reserved snapshots.
+2. **Delivery Safeguard:** Transitioning to `delivered` strictly does NOT deduct inventory again.
+3. **Atomic Rollback Guarantee:** Status changes, product stock mutations, inventory movements, tracking snapshots, and audit log generation execute within a single MongoDB multi-document transaction (`session.withTransaction`).
+
+### 8.3 Cash on Delivery (COD) Payment Collection
+- Delivery of a COD order requires explicit administrator confirmation (`codPaymentCollected: true`).
+- Atomically transitions `order.paymentStatus` to `'paid'` and `Payment.status` to `'paid'`.
+- Records a dedicated `COD_PAYMENT_COLLECTED` audit log entry in the same transaction.
+
+### 8.4 Administrative Cancellation & Stock Restocking
+- Admins may cancel orders in `awaiting_payment`, `confirmed`, or `processing`.
+- Shipped and delivered orders are non-cancellable.
+- Paid online orders cannot be cancelled without a configured refund provider.
+- Atomically decrements `stock.reserved` and increments `stock.available` with `'release'` movements. Guarded by `isStockRestocked: false`.
+
+### 8.5 Aggregated Dashboard Analytics & Revenue Recognition
+- **Recognized Paid Revenue:** Strictly calculated from orders where `paymentStatus === 'paid'`. Excludes unpaid online orders, cancelled orders, and uncollected COD orders.
+- **Low-Stock Detection:** Computed directly via database aggregation query comparing `$stock.available <= $lowStockThreshold` across non-archived products.
+- **Order Breakdown:** Aggregate query grouping orders across all 6 statuses.
+
+### 8.6 Append-Only Audit Logging
+- Dedicated `audit_logs` collection recording actor, action, resourceType, resourceId, client IP, and sanitized change details.
+- Immutability enforced: No PUT, PATCH, or DELETE endpoints exist for audit logs.
+- Indexed by `{ actor: 1, createdAt: -1 }`, `{ resourceType: 1, resourceId: 1 }`, and `{ createdAt: -1 }`.
+
+---
+
+## 9. Unresolved Decisions & Safe Defaults
 
 | Decision Area | Unresolved Aspect | Chosen Safe Default for V1 |
 | :--- | :--- | :--- |

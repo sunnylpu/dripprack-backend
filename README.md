@@ -277,6 +277,29 @@ Phase 6 implements server-authoritative checkout quotes, atomic multi-document o
 3. **Idempotency with Payload Hashing:** Replays with matching key and identical payload safely return the canonical order (200 OK). Replays with modified payloads return `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
 4. **Safe Payment Defaults:** Cash on Delivery (COD) is the active V1 payment method. Online payments remain disabled by default (`ENABLE_ONLINE_PAYMENTS = false`) until genuine credentials are provided.
 
+---
+
+## 12. Admin Order Fulfillment, Dashboard & Audit Logging (Phase 7)
+
+Phase 7 implements administrative order management, a strict fulfillment state machine with HTTPS tracking requirements, critical inventory commitment as a sale at shipment, COD payment confirmation, aggregated dashboard analytics, and an append-only audit trail.
+
+### Admin Fulfillment Endpoints (`/api/v1/admin`)
+- `GET /api/v1/admin/dashboard/summary`: Aggregated operational metrics: orders grouped by status, recognized paid revenue in integer cents (excluding unpaid/cancelled orders and counting COD revenue only upon verified delivery), low-stock product count (`stock.available <= lowStockThreshold`), and the latest 10 orders.
+- `GET /api/v1/admin/orders`: List all orders across all customers with bounded pagination (`page`, `limit`), sorting newest-first, and filtering by `orderStatus`, `paymentStatus`, `paymentMethod`, date range (`startDate`, `endDate`), and search text.
+- `GET /api/v1/admin/orders/:reference`: Retrieve complete order details, item snapshots, shipping address, payment record, fulfillment status, and order-specific audit logs.
+- `PATCH /api/v1/admin/orders/:reference/status`: Execute validated fulfillment state transitions:
+  - `confirmed` $\to$ `processing`: Claims order for warehouse preparation and writes audit log.
+  - `processing` $\to$ `shipped`: Requires validated HTTPS tracking details (`carrier`, `trackingNumber`, `trackingUrl`). Inside a transaction, atomically decrements `stock.physical` and `stock.reserved` by the order quantity, leaves `stock.available` unchanged (since units were excluded when reserved), and appends `'sale'` `InventoryMovement` records.
+  - `shipped` $\to$ `delivered`: For COD orders, requires explicit confirmation (`codPaymentCollected: true`). Atomically marks order and payment status as `paid`, writes `COD_PAYMENT_COLLECTED` audit log, and does not deduct inventory again.
+  - Repeating the same status request is idempotent and does not produce duplicate stock or audit mutations.
+- `POST /api/v1/admin/orders/:reference/cancel`: Admin cancellation for eligible unshipped orders (`awaiting_payment`, `confirmed`, `processing`). Atomically releases reserved stock back to available quantity, appends `'release'` `InventoryMovement` entries, marks payment as `failed`, and writes `ORDER_CANCELLED` audit log. Shipped, delivered, and paid online orders cannot be cancelled via this route.
+- `GET /api/v1/admin/audit-logs`: Query the append-only governance audit trail with pagination and filters (`actor`, `action`, `resourceType`, `resourceId`, date range). Audit records cannot be modified or deleted via the API.
+
+### Core Fulfillment & Inventory Rules:
+1. **Strict Lifecycle State Machine:** Orders strictly follow `confirmed -> processing -> shipped -> delivered`. Unverified online orders cannot be fulfilled (`paymentStatus === 'paid'` required).
+2. **Sale Commitment at Dispatch:** Inventory conversion from reservation to sale occurs strictly at `shipped`. The invariant $\text{available} = \text{physical} - \text{reserved}$ is preserved at all stages.
+3. **Audit Trail Immutability:** All administrative status changes, cancellations, and COD collections are written to `audit_logs` in the same database transaction as the business operation.
+
 
 
 

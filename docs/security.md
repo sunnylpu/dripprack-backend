@@ -224,6 +224,32 @@ Every incoming HTTP request generates or propagates an `X-Request-Id` UUID heade
 7. **Zero Cardholder Secret Storage:**
    - The application never accepts, logs, or stores raw credit card numbers, CVVs, or gateway API secret keys.
 
+---
+
+## 9. Admin Fulfillment, Access Control & Audit Logging Security (Phase 7)
+
+1. **Role-Based Authorization Enforcement:**
+   - All `/api/v1/admin/*` endpoints strictly enforce `authenticate` and `authorize('admin')`.
+   - Customer tokens receive `403 Forbidden` (`FORBIDDEN`). Unauthenticated requests receive `401 Unauthorized` (`UNAUTHORIZED`).
+   - Actor identity is strictly extracted from `req.user._id`; client-submitted actor IDs or role spoofing attempts are ignored.
+
+2. **Fulfillment State Machine Security:**
+   - Order transitions strictly adhere to `confirmed -> processing -> shipped -> delivered`. Arbitrary or non-consecutive status jumps return `409 Conflict` (`INVALID_ORDER_TRANSITION`).
+   - Online orders strictly require `paymentStatus === 'paid'` before entering warehouse fulfillment, preventing unauthorized dispatch of unpaid items.
+   - Terminal orders (`delivered`, `cancelled`) cannot be modified or reopened via fulfillment endpoints.
+
+3. **HTTPS Protocol Enforcement for Tracking URLs:**
+   - Dispatch to `shipped` validates that `tracking.trackingUrl` uses the secure `https://` protocol via regex `^https://`, preventing protocol manipulation or insecure tracking links.
+
+4. **Cash on Delivery (COD) Payment Collection Verification:**
+   - Delivery transition of a COD order strictly requires explicit `codPaymentCollected: true` confirmation. Missing confirmation halts the transition with `400 Bad Request` (`COD_PAYMENT_REQUIRED`), preventing inadvertent inventory write-off without collected funds.
+
+5. **Append-Only Governance & Audit Trail Immutability:**
+   - The `audit_logs` collection is append-only. No HTTP endpoints (`PUT`, `PATCH`, `DELETE`) are exposed to mutate or purge audit records.
+   - Audit records capture the actor User ID, action code, resource type, resource ID, client IP, and sanitized metadata changes.
+   - Secrets, authorization headers, passwords, and sensitive payment details are strictly excluded from audit record details.
+
+
 
 
 

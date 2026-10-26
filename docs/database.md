@@ -250,6 +250,7 @@ The primary transaction entity. Contains immutable snapshots of products, pricin
 - `{ idempotencyKey: 1 }` (Unique with `partialFilterExpression: { idempotencyKey: { $type: "string" } }`)
 - `{ customer: 1, createdAt: -1 }` (Customer history pagination)
 - `{ orderStatus: 1, createdAt: -1 }` (Admin status queries)
+- `{ paymentStatus: 1, createdAt: -1 }` (Admin payment status filters and revenue aggregation)
 
 ---
 
@@ -282,19 +283,20 @@ Stores payment records, gateway transactions, and webhook event logs.
 
 ### 2.10 AuditLog Collection (`audit_logs`)
 
-Maintains security and governance logs for critical administrator actions.
+Maintains immutable security and governance logs for critical administrator actions. Audit records are strictly append-only.
 
 | Field | Type | Required | Constraints & Description |
 | :--- | :--- | :--- | :--- |
 | `_id` | ObjectId | Yes | Auto Primary Key |
 | `actor` | ObjectId | Yes | Ref to `User` |
-| `action` | String | Yes | E.g. `PRODUCT_ARCHIVED`, `STOCK_ADJUSTED`, `ORDER_STATUS_CHANGED` |
-| `resourceType` | String | Yes | E.g. `product`, `order`, `inventory` |
-| `resourceId` | String | Yes | Target resource identifier |
+| `action` | String | Yes | E.g. `ORDER_STATUS_CHANGED`, `ORDER_CANCELLED`, `COD_PAYMENT_COLLECTED` |
+| `resourceType` | String | Yes | E.g. `order`, `product`, `inventory` |
+| `resourceId` | String | Yes | Target resource identifier (e.g. order reference) |
 | `ipAddress` | String | No | Client IP |
 | `details` | Object | No | Key metadata changes (sanitized) |
 | `createdAt` | Date | Yes | Timestamp |
 
 **Indexes:**
-- `{ actor: 1, createdAt: -1 }`
-- `{ resourceType: 1, resourceId: 1 }`
+- `{ actor: 1, createdAt: -1 }` (Auditing by administrator)
+- `{ resourceType: 1, resourceId: 1 }` (Target resource history lookups)
+- `{ createdAt: -1 }` (Chronological administrative audit trail)

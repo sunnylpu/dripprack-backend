@@ -157,6 +157,19 @@ export const paymentService = {
         }
         await payment.save({ session });
 
+        if (order.orderStatus === 'cancelled') {
+          // Unpaid online order was cancelled prior to payment webhook; do not revive order
+          payment.processedEvents.push(event.eventId);
+          payment.failureReason = 'Payment event received after order was already cancelled';
+          await payment.save({ session });
+          await session.commitTransaction();
+          return {
+            acknowledged: true,
+            status: 'cancelled_prior_to_payment',
+            orderReference: order.orderReference
+          };
+        }
+
         if (order.orderStatus === 'awaiting_payment') {
           order.orderStatus = 'confirmed';
           order.paymentStatus = 'paid';

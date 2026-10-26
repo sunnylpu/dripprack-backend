@@ -1323,6 +1323,211 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Phase 7 — Admin Fulfillment & Dashboard",
+      "item": [
+        {
+          "name": "Get Admin Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "dashboard", "summary"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Orders (Admin Filtered)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders?page=1&limit=10&orderStatus=confirmed",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "orderStatus",
+                  "value": "confirmed"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order Details (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders/{{orderReference}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders", "{{orderReference}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status (Confirmed -> Processing)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"processing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders/{{orderReference}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders", "{{orderReference}}", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status to Shipped (With Tracking)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"shipped\",\n  \"tracking\": {\n    \"carrier\": \"FedEx\",\n    \"trackingNumber\": \"FDX987654321\",\n    \"trackingUrl\": \"https://fedex.com/track?id=FDX987654321\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders/{{orderReference}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders", "{{orderReference}}", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Order Status to Delivered (Confirm COD Collection)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"delivered\",\n  \"codPaymentCollected\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders/{{orderReference}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders", "{{orderReference}}", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Cancel Order (With Reason & Restock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Administrative cancellation: item out of stock with supplier\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/orders/{{orderReference}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "orders", "{{orderReference}}", "cancel"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Audit Logs (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}{{apiPrefix}}/admin/audit-logs?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["{{apiPrefix}}", "admin", "audit-logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

@@ -903,6 +903,283 @@ All address endpoints require `authenticate` and `authorize('customer')`. Owners
 - **Idempotency:** Replaying processed event IDs returns `200 OK` (`duplicate: true`) without re-applying state mutations.
 - **Compensating Release:** When `payment_intent.payment_failed` is received for an `awaiting_payment` order, the order is cancelled and reserved inventory is released exactly once.
 
+---
+
+## 11. Phase 7 Implemented Endpoint Details: Admin Fulfillment, Dashboard & Audit Logging
+
+All endpoints in this section strictly require `authenticate` and `authorize('admin')`.
+
+### 11.1 GET `/api/v1/admin/dashboard/summary`
+- **Access:** Administrator only (`admin` role)
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Dashboard summary retrieved successfully",
+    "data": {
+      "revenue": {
+        "totalRevenueCents": 31500,
+        "paidOrdersCount": 2,
+        "currency": "USD"
+      },
+      "ordersByStatus": {
+        "awaiting_payment": 0,
+        "confirmed": 3,
+        "processing": 1,
+        "shipped": 2,
+        "delivered": 2,
+        "cancelled": 1
+      },
+      "totalOrdersCount": 9,
+      "lowStockProductsCount": 2,
+      "recentOrders": [
+        {
+          "orderReference": "ORD-20261027-F7A9B1",
+          "customer": {
+            "_id": "671da1234567890123456789",
+            "firstName": "Alice",
+            "lastName": "Customer",
+            "email": "alice@driprack.com"
+          },
+          "currency": "USD",
+          "totalCents": 16500,
+          "orderStatus": "shipped",
+          "paymentStatus": "paid",
+          "paymentMethod": "online",
+          "createdAt": "2026-10-27T03:00:00.000Z"
+        }
+      ],
+      "generatedAt": "2026-10-27T03:30:00.000Z"
+    }
+  }
+  ```
+- **Business Logic:**
+  - Revenue counts solely orders where `paymentStatus === 'paid'`.
+  - Excludes unpaid online orders, cancelled orders, and uncollected COD orders.
+  - Low-stock count evaluates non-archived products where `stock.available <= lowStockThreshold`.
+
+---
+
+### 11.2 GET `/api/v1/admin/orders`
+- **Access:** Administrator only (`admin` role)
+- **Query Parameters:**
+  - `page`: Integer $\ge 1$ (default: `1`)
+  - `limit`: Integer $1 \dots 100$ (default: `10`)
+  - `orderStatus`: `awaiting_payment` | `confirmed` | `processing` | `shipped` | `delivered` | `cancelled`
+  - `paymentStatus`: `pending` | `paid` | `failed` | `refunded` | `cod_due`
+  - `paymentMethod`: `cod` | `online`
+  - `startDate`: ISO 8601 string (optional)
+  - `endDate`: ISO 8601 string (optional)
+  - `search`: String (searches `orderReference` or recipient name)
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Orders retrieved successfully",
+    "data": {
+      "orders": [
+        {
+          "_id": "671da8901234567890123456",
+          "orderReference": "ORD-20261027-A9F3K7",
+          "customer": {
+            "_id": "671da1234567890123456789",
+            "firstName": "Jane",
+            "lastName": "Customer",
+            "email": "customer@driprack.com"
+          },
+          "currency": "USD",
+          "subtotalCents": 15000,
+          "shippingCents": 0,
+          "taxCents": 1500,
+          "totalCents": 16500,
+          "orderStatus": "processing",
+          "paymentMethod": "cod",
+          "paymentStatus": "cod_due",
+          "createdAt": "2026-10-27T02:00:00.000Z"
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "limit": 10,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+  ```
+
+---
+
+### 11.3 GET `/api/v1/admin/orders/:reference`
+- **Access:** Administrator only (`admin` role)
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Order details retrieved successfully",
+    "data": {
+      "order": {
+        "orderReference": "ORD-20261027-A9F3K7",
+        "customer": {
+          "_id": "671da1234567890123456789",
+          "firstName": "Jane",
+          "lastName": "Customer",
+          "email": "customer@driprack.com"
+        },
+        "items": [
+          {
+            "sku": "DRIP-CBJ-001",
+            "name": "Cargo Bomber Jacket",
+            "unitPriceCents": 15000,
+            "quantity": 1,
+            "lineTotalCents": 15000
+          }
+        ],
+        "shippingAddress": {
+          "recipientName": "Jane Customer",
+          "phone": "+1-555-0199",
+          "streetAddress1": "123 Drip Blvd",
+          "city": "Los Angeles",
+          "state": "CA",
+          "postalCode": "90001",
+          "country": "US"
+        },
+        "orderStatus": "shipped",
+        "paymentMethod": "cod",
+        "paymentStatus": "cod_due",
+        "tracking": {
+          "carrier": "FedEx",
+          "trackingNumber": "FDX987654321",
+          "trackingUrl": "https://fedex.com/track?id=FDX987654321",
+          "dispatchedAt": "2026-10-27T03:15:00.000Z"
+        }
+      },
+      "payment": {
+        "provider": "cod",
+        "amountCents": 16500,
+        "currency": "USD",
+        "status": "cod_due"
+      },
+      "auditLogs": [
+        {
+          "action": "ORDER_STATUS_CHANGED",
+          "actor": {
+            "firstName": "Super",
+            "lastName": "Admin",
+            "email": "admin@driprack.com"
+          },
+          "details": {
+            "previousStatus": "processing",
+            "newStatus": "shipped"
+          },
+          "createdAt": "2026-10-27T03:15:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 11.4 PATCH `/api/v1/admin/orders/:reference/status`
+- **Access:** Administrator only (`admin` role)
+- **Request Body (Advance to `processing`):**
+  ```json
+  {
+    "status": "processing"
+  }
+  ```
+- **Request Body (Dispatch / `shipped`):**
+  ```json
+  {
+    "status": "shipped",
+    "tracking": {
+      "carrier": "FedEx",
+      "trackingNumber": "FDX987654321",
+      "trackingUrl": "https://fedex.com/track?id=FDX987654321"
+    }
+  }
+  ```
+- **Request Body (Deliver COD / `delivered`):**
+  ```json
+  {
+    "status": "delivered",
+    "codPaymentCollected": true
+  }
+  ```
+- **State Machine Rules:**
+  - Allowed transitions: `confirmed` $\to$ `processing` $\to$ `shipped` $\to$ `delivered`.
+  - Non-consecutive jumps or transitions on terminal states return `409 Conflict` (`INVALID_ORDER_TRANSITION` / `INVALID_ORDER_STATUS`).
+  - Transition to `shipped` requires HTTPS tracking details and atomically commits reserved stock as sold (`movementType: 'sale'`).
+  - Transition to `delivered` for COD requires `codPaymentCollected: true` and marks payment as `paid`.
+
+---
+
+### 11.5 POST `/api/v1/admin/orders/:reference/cancel`
+- **Access:** Administrator only (`admin` role)
+- **Request Body:**
+  ```json
+  {
+    "reason": "Administrative cancellation: item out of stock with supplier"
+  }
+  ```
+- **Description:** Cancels an eligible unshipped order (`awaiting_payment`, `confirmed`, `processing`), marks payment as `failed`, atomically releases reserved stock back to available stock, and appends a `'release'` `InventoryMovement` entry.
+- **Constraints:** Shipped or delivered orders return `409 Conflict` (`ORDER_NOT_CANCELLABLE`). Paid online orders return `409 Conflict` (`REFUND_NOT_SUPPORTED`). Repeated calls return `409 Conflict` (`ORDER_ALREADY_CANCELLED`).
+
+---
+
+### 11.6 GET `/api/v1/admin/audit-logs`
+- **Access:** Administrator only (`admin` role)
+- **Query Parameters:** `page`, `limit`, `actor`, `action`, `resourceType`, `resourceId`, `startDate`, `endDate`
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Audit logs retrieved successfully",
+    "data": {
+      "auditLogs": [
+        {
+          "_id": "671da9991234567890123456",
+          "actor": {
+            "_id": "671da0001234567890123456",
+            "firstName": "Super",
+            "lastName": "Admin",
+            "email": "admin@driprack.com"
+          },
+          "action": "ORDER_STATUS_CHANGED",
+          "resourceType": "order",
+          "resourceId": "ORD-20261027-A9F3K7",
+          "details": {
+            "previousStatus": "processing",
+            "newStatus": "shipped",
+            "tracking": {
+              "carrier": "FedEx",
+              "trackingNumber": "FDX987654321"
+            }
+          },
+          "createdAt": "2026-10-27T03:15:00.000Z"
+        }
+      ]
+    },
+    "meta": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "totalPages": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+  ```
+- **Immutability:** Audit records are strictly append-only. No mutation routes exist.
+
+
 
 
 

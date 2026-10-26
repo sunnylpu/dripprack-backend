@@ -60,12 +60,22 @@ The DripRack testing suite ensures that all business constraints, security contr
 | **AC-43** | Paid Order Cancellation Limitation | Paid orders cannot be cancelled by customer without an active refund provider, returning `409 Conflict` (`REFUND_NOT_SUPPORTED`). |
 | **AC-44** | Payment Gateway Isolation | Online payment returns `400 Bad Request` (`ONLINE_PAYMENTS_DISABLED`) when online processing is disabled or unconfigured in production. Mock gateway safely generates intents in test/dev modes. |
 | **AC-45** | Cryptographic Webhook Verification & Idempotency | Payment webhook verifies HMAC-SHA256 signatures against `req.rawBody`. Duplicate event deliveries acknowledge idempotently without repeating state transitions. Payment failure triggers compensating stock release. |
+| **AC-46** | Admin Role Authorization | Unauthenticated requests receive 401; customer tokens receive 403 across all `/api/v1/admin/*` endpoints. Actor ID is strictly extracted from `req.user._id`. |
+| **AC-47** | Admin Order Listing & Filters | Admin order listing supports deterministic sorting, pagination, and multi-field filters (`orderStatus`, `paymentStatus`, `paymentMethod`, date range, search). Invalid date ranges return 422. |
+| **AC-48** | Admin Order Details & Audit History | Order detail lookup returns line item snapshots, shipping address, payment record, tracking, and associated audit records sorted newest-first. |
+| **AC-49** | Fulfillment State Machine Transitions | Valid transitions `confirmed -> processing -> shipped -> delivered` succeed. Non-consecutive jumps or transitions on delivered/cancelled orders return `409 Conflict`. |
+| **AC-50** | Online Fulfillment Payment Invariant | Online orders require `paymentStatus === 'paid'` before fulfillment processing (returns `409 Conflict` `ORDER_PAYMENT_REQUIRED`). |
+| **AC-51** | Inventory Commitment at Dispatch | Transition to `shipped` atomically decrements `stock.physical` and `stock.reserved` by ordered quantity, preserves `stock.available`, and records `'sale'` `InventoryMovement` entries. Delivery does not deduct stock again. |
+| **AC-52** | Shipping Tracking Validation | Dispatch requires carrier, tracking number, and HTTPS tracking URL (`^https://`). Missing or insecure URLs return 422. |
+| **AC-53** | COD Payment Collection Confirmation | Delivering a COD order requires `codPaymentCollected: true`, atomically transitioning order and payment status to `paid` and recording `COD_PAYMENT_COLLECTED` audit log. |
+| **AC-54** | Admin Order Cancellation & Restock | Admins may cancel eligible unshipped orders (`awaiting_payment`, `confirmed`, `processing`), releasing reserved stock back to available quantity exactly once with `'release'` movements. Shipped, delivered, and paid online orders cannot be cancelled. |
+| **AC-55** | Append-Only Audit Trail & Dashboard Analytics | Audit logs are strictly append-only with zero mutation routes. Dashboard summary accurately aggregates order counts, recognized paid revenue (excluding unpaid/cancelled), and low-stock product counts. |
 
 ---
 
 ## 3. Transactional Test Environment
 
-Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js`, `tests/cart.test.js`, `tests/address.test.js`, `tests/order.test.js`, and `tests/payment.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
+Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js`, `tests/cart.test.js`, `tests/address.test.js`, `tests/order.test.js`, `tests/payment.test.js`, and `tests/admin.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
 ```javascript
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
@@ -80,8 +90,11 @@ beforeAll(async () => {
 ## 4. Test Execution & Audit Commands
 
 ```bash
-# Run complete test suite (all phases regression)
+# Run complete test suite (all phases regression - 197 tests across 13 files)
 npm test
+
+# Run admin order fulfillment, dashboard & audit log tests specifically
+npx vitest run tests/admin.test.js
 
 # Run checkout & order management tests specifically
 npx vitest run tests/order.test.js

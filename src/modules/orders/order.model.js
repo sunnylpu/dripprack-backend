@@ -262,5 +262,6 @@ orderSchema.index(
 );
 orderSchema.index({ customer: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ paymentStatus: 1, createdAt: -1 });
 
 export const Order = mongoose.model('Order', orderSchema, 'orders');

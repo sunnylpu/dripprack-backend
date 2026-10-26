@@ -157,12 +157,21 @@ export const cartService = {
         );
       }
 
-      cart = await Cart.create({
-        user: userId,
-        items: [{ product: productId, quantity, addedAt: new Date() }]
-      });
+      try {
+        cart = await Cart.create({
+          user: userId,
+          items: [{ product: productId, quantity, addedAt: new Date() }]
+        });
 
-      return this.getCart(userId);
+        return this.getCart(userId);
+      } catch (err) {
+        if (err && err.code === 11000) {
+          // Concurrent cart creation race: load the newly created cart and proceed
+          cart = await Cart.findOne({ user: userId });
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Cart already exists: check if product is already in items array
