@@ -2,7 +2,7 @@
   "info": {
     "name": "DripRack API v1",
     "_postman_id": "c1f79a78-bfae-4f04-9844-driprack0001",
-    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 4 (Inventory & Stock Management)",
+    "description": "Production-grade Secure MERN E-Commerce Backend API Collection - Phase 5 (Cart & Delivery Address Management)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -654,6 +654,317 @@
             }
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Cart & Delivery Addresses (Phase 5)",
+      "item": [
+        {
+          "name": "Shopping Cart",
+          "item": [
+            {
+              "name": "Get Authenticated Customer Cart",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Add Item to Cart",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 2\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart/items",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart", "items"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Cart Item Quantity",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"quantity\": 5\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart/items/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart", "items", "{{productId}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Remove Item from Cart",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart/items/{{productId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart", "items", "{{productId}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Clear Customer Cart",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Wrong-Role Cart Denial (Admin -> 403 Forbidden)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{adminAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/cart",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "cart"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Delivery Addresses",
+          "item": [
+            {
+              "name": "List Customer Addresses",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Address (First Address Auto-Default)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    pm.environment.set('addressId', jsonData.data._id);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Jane Doe\",\n  \"phone\": \"+14155552671\",\n  \"streetAddress1\": \"100 Market St\",\n  \"streetAddress2\": \"Suite 400\",\n  \"city\": \"San Francisco\",\n  \"state\": \"CA\",\n  \"postalCode\": \"94105\",\n  \"country\": \"US\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Second Address (Non-Default)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Jane Doe\",\n  \"phone\": \"+14155552671\",\n  \"streetAddress1\": \"500 Howard St\",\n  \"city\": \"San Francisco\",\n  \"state\": \"CA\",\n  \"postalCode\": \"94105\",\n  \"country\": \"US\",\n  \"isDefault\": false\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Customer Address",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"streetAddress2\": \"Floor 10\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses", "{{addressId}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set Default Address",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses/{{addressId}}/default",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses", "{{addressId}}", "default"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Address (Promotes Newest Remaining)",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses/{{addressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses", "{{addressId}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Cross-Customer Access Denial (404 Not Found)",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{customerAccessToken}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipientName\": \"Malicious Update Attempt\"\n}"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}{{apiPrefix}}/addresses/{{otherCustomerAddressId}}",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["{{apiPrefix}}", "addresses", "{{otherCustomerAddressId}}"]
+                }
+              },
+              "response": []
+            }
+          ]
         }
       ]
     }

@@ -603,5 +603,182 @@ All inventory endpoints require `authenticate` and `authorize('admin')`. Guests 
   }
   ```
 
+---
+
+## 8. Phase 5 Implemented Endpoint Details (Shopping Cart)
+
+All cart endpoints require `authenticate` and `authorize('customer')`. Guests receive `401 Unauthorized`; admins receive `403 Forbidden`.
+
+### 8.1 GET `/api/v1/cart`
+- **Access:** Customer only
+- **Description:** Retrieve the authenticated customer's shopping cart populated with real-time product eligibility and dynamic pricing.
+- **Informational Subtotals:** Calculates non-authoritative estimated subtotals using current catalog prices. Phase 6 checkout independently recalculates all authoritative pricing.
+- **Storefront Availability:** Flagged per item with `isAvailableForPurchase` and `unavailableReason` if unpublished, archived, out of stock, or belonging to an inactive category.
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Shopping cart retrieved successfully",
+    "data": {
+      "cart": {
+        "_id": "6adfd0a187e1a0b387cf0011",
+        "user": "6adfba6f94ba7187790e84f6",
+        "items": [
+          {
+            "_id": "6adfd0a187e1a0b387cf0012",
+            "product": {
+              "_id": "6adfbe1661482ddd425c970c",
+              "sku": "DRIP-HOODIE-BLK-M",
+              "name": "Heavyweight Boxy Hoodie",
+              "slug": "heavyweight-boxy-hoodie",
+              "images": ["https://images.driprack.com/hoodie-black.jpg"],
+              "priceCents": 8500,
+              "compareAtPriceCents": 11000,
+              "status": "published",
+              "availableStock": 25
+            },
+            "quantity": 2,
+            "unitPriceCents": 8500,
+            "lineTotalCents": 17000,
+            "isAvailableForPurchase": true,
+            "unavailableReason": null,
+            "addedAt": "2026-10-27T02:40:00.000Z"
+          }
+        ],
+        "itemCount": 2,
+        "estimatedSubtotalCents": 17000,
+        "currency": "USD",
+        "isAuthoritative": false,
+        "updatedAt": "2026-10-27T02:40:00.000Z"
+      }
+    }
+  }
+  ```
+
+---
+
+### 8.2 POST `/api/v1/cart/items`
+- **Access:** Customer only
+- **Description:** Add item to cart or increment quantity if already present. Enforces maximum quantity of 99 per product.
+- **Request Body:**
+  ```json
+  {
+    "productId": "6adfbe1661482ddd425c970c",
+    "quantity": 2
+  }
+  ```
+- **Validation Constraints:**
+  - `productId`: Valid 24-char ObjectId.
+  - `quantity`: Positive integer ($1 \le q \le 99$, default: 1).
+  - Product must be published, in an active category, and have sufficient available stock.
+- **Error Codes:** `404 NOT_FOUND` (Product missing), `409 PRODUCT_UNAVAILABLE`, `409 CATEGORY_INACTIVE`, `409 OUT_OF_STOCK`, `409 INSUFFICIENT_STOCK`.
+
+---
+
+### 8.3 PATCH `/api/v1/cart/items/:productId`
+- **Access:** Customer only
+- **Description:** Explicitly set the requested quantity of an existing cart item.
+- **Request Body:**
+  ```json
+  {
+    "quantity": 5
+  }
+  ```
+- **Validation Constraints:** `quantity` integer ($1 \le q \le 99$). Must not exceed current available stock.
+
+---
+
+### 8.4 DELETE `/api/v1/cart/items/:productId`
+- **Access:** Customer only
+- **Description:** Remove specified product from customer's cart. Works unconditionally even if product was archived, deleted, or out of stock.
+
+---
+
+### 8.5 DELETE `/api/v1/cart`
+- **Access:** Customer only
+- **Description:** Clear all items from customer's shopping cart.
+
+---
+
+## 9. Phase 5 Implemented Endpoint Details (Delivery Address Book)
+
+All address endpoints require `authenticate` and `authorize('customer')`. Ownership is strictly scoped to `req.user._id`.
+
+### 9.1 GET `/api/v1/addresses`
+- **Access:** Customer only
+- **Description:** Retrieve all delivery addresses owned by the authenticated customer.
+- **Ordering:** Deterministic order with default address first (`isDefault: -1`), followed by newest created (`createdAt: -1`).
+- **Response (200 OK):**
+  ```json
+  {
+    "success": true,
+    "statusCode": 200,
+    "message": "Delivery addresses retrieved successfully",
+    "data": {
+      "addresses": [
+        {
+          "_id": "6adfd1b287e1a0b387cf0020",
+          "user": "6adfba6f94ba7187790e84f6",
+          "recipientName": "Jane Doe",
+          "phone": "+1 555-234-5678",
+          "streetAddress1": "123 Fashion Ave",
+          "streetAddress2": "Apt 4B",
+          "city": "New York",
+          "state": "NY",
+          "postalCode": "10001",
+          "country": "US",
+          "isDefault": true,
+          "createdAt": "2026-10-27T02:45:00.000Z",
+          "updatedAt": "2026-10-27T02:45:00.000Z"
+        }
+      ]
+    }
+  }
+  ```
+
+---
+
+### 9.2 POST `/api/v1/addresses`
+- **Access:** Customer only
+- **Description:** Add a new delivery address. First created address automatically becomes default (`isDefault: true`). Subsequent addresses can specify `isDefault: true`, transactionally unsetting previous default.
+- **Request Body:**
+  ```json
+  {
+    "recipientName": "Jane Doe",
+    "phone": "+1 555-234-5678",
+    "streetAddress1": "123 Fashion Ave",
+    "streetAddress2": "Apt 4B",
+    "city": "New York",
+    "state": "NY",
+    "postalCode": "10001",
+    "country": "US",
+    "isDefault": false
+  }
+  ```
+- **Response (201 Created):** Returns created address document.
+
+---
+
+### 9.3 PATCH `/api/v1/addresses/:id`
+- **Access:** Customer only
+- **Description:** Update editable fields (`recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, `country`).
+- **Ownership Verification:** Scoped strictly to authenticated user (`{ _id: id, user: req.user._id }`). Inaccessible addresses return `404 NOT_FOUND`.
+
+---
+
+### 9.4 PATCH `/api/v1/addresses/:id/default`
+- **Access:** Customer only
+- **Description:** Designate this address as the default delivery address. Transactionally unsets previous default.
+- **Database Safeguard:** Partial unique index `{ user: 1, isDefault: true }` guarantees at most one default address exists.
+
+---
+
+### 9.5 DELETE `/api/v1/addresses/:id`
+- **Access:** Customer only
+- **Description:** Delete an owned delivery address.
+- **Promotion Rule:** If deleted address was default, the most recently created remaining address is automatically promoted to default. If no addresses remain, no default is assigned.
+
+
 
 

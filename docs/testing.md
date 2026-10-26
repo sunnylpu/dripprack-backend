@@ -39,12 +39,22 @@ The DripRack testing suite ensures that all business constraints, security contr
 | **AC-22** | SKU Snapshotting & Immutability | Audit movements capture SKU snapshot at mutation time. Movements cannot be modified or deleted via the API (404 on PATCH/DELETE). |
 | **AC-23** | Low-Stock Reporting | `GET /api/v1/inventory/low-stock` accurately includes products with `stock.available <= lowStockThreshold` (including 0 stock items). |
 | **AC-24** | Public Category Lookup Regression | Public `GET /api/v1/categories/:id` returns `404 Not Found` for deactivated categories. |
+| **AC-25** | Cart Customer-Only Role Restriction | Guests accessing `/api/v1/cart/*` receive `401 Unauthorized`; admin tokens receive `403 Forbidden`. Only authenticated customers succeed. |
+| **AC-26** | Cart Isolation & Ownership Integrity | Cart is strictly keyed to authenticated customer (`req.user._id`). Customer A cannot view or manipulate Customer B's cart lines. |
+| **AC-27** | Non-Authoritative Cart Pricing | Unit prices and line subtotals are resolved dynamically from active catalog data and labeled `isAuthoritative: false`. Client-supplied prices and totals are completely rejected. |
+| **AC-28** | Cart Availability & Catalog Changes | Adding unpublished/archived products or products in deactivated categories returns `400 Bad Request` or `409 Conflict`. When catalog status changes, cart reads flag `isAvailableForPurchase: false` without silent line deletion. |
+| **AC-29** | Cart Quantity Bounds & Atomic Concurrency | Quantities outside `[1, 99]`, negative numbers, floats, or zero return `400 Bad Request`. Concurrent additions use atomic `$inc` and `$push` without duplicate line items or lost updates. |
+| **AC-30** | Cart Zero Stock Modification | Cart operations (add, update, remove, clear) strictly never modify product `physical`, `reserved`, or `available` stock counts. |
+| **AC-31** | Address Ownership Scoping & BOLA Defense | All address mutations (`PATCH`, `DELETE`, `PATCH /default`) query by `{ _id: addressId, user: req.user._id }`. Accessing another user's address returns `404 Not Found`. Client-supplied owner IDs are ignored or rejected. |
+| **AC-32** | Single Default Address Invariant | Enforced via partial unique index `{ user: 1 }` (`partialFilterExpression: { isDefault: true }`). At most one address can have `isDefault: true` per customer. |
+| **AC-33** | Automatic First Address Default | A customer's first created address automatically receives `isDefault: true`. Subsequent creations default to `false` unless explicitly specified. |
+| **AC-34** | Default Promotion on Address Deletion | Deleting a default address automatically promotes the customer's newest remaining address to default inside a MongoDB transaction. If no addresses remain, deletion succeeds cleanly without a default. |
 
 ---
 
 ## 3. Transactional Test Environment
 
-Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
+Multi-document transactions require a replica set topology. Integration tests in `tests/inventory.test.js`, `tests/cart.test.js`, and `tests/address.test.js` initialize an in-memory replica set via `MongoMemoryReplSet`:
 ```javascript
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
@@ -56,11 +66,17 @@ beforeAll(async () => {
 
 ---
 
-## 4. Test Execution & Inventory Audit Commands
+## 4. Test Execution & Audit Commands
 
 ```bash
-# Run complete test suite (all phases)
+# Run complete test suite (all phases regression)
 npm test
+
+# Run cart module tests specifically
+npx vitest run tests/cart.test.js
+
+# Run address book module tests specifically
+npx vitest run tests/address.test.js
 
 # Run inventory module tests specifically
 npx vitest run tests/inventory.test.js
@@ -71,4 +87,5 @@ node scripts/auditInventoryIntegrity.js
 # Run tests with coverage report
 npm run test:coverage
 ```
+
 

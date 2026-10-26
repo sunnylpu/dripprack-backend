@@ -248,7 +248,37 @@ await InventoryMovement.create(
 
 ---
 
-## 6. Unresolved Decisions & Safe Defaults
+## 6. Shopping Cart & Delivery Address Architecture (Phase 5)
+
+### 6.1 Customer Shopping Cart Architecture
+The shopping cart module (`src/modules/carts/`) implements a customer-owned, server-authoritative holding buffer for items intended for purchase:
+
+1. **One Cart Per Customer:** Enforced at database level via `{ user: 1 }` unique index on `carts`.
+2. **Non-Authoritative Pricing:** Prices are **never** stored in cart item documents. Only product references, requested quantities ($1 \le q \le 99$), and addition timestamps are saved.
+3. **Dynamic Read-Time Pricing & Availability:** On cart read (`GET /api/v1/cart`), the service populates product records and dynamically computes:
+   - Current unit prices and line totals from active catalog data.
+   - Informational estimated subtotals (clearly marked `isAuthoritative: false`).
+   - Storefront purchase eligibility: verifying product publication status, category active status, and real-time available stock.
+4. **Resilience to Catalog Changes:** If an item in the cart is unpublished, archived, out of stock, or moved to an inactive category, the cart line is preserved rather than silently dropped. It is flagged with `isAvailableForPurchase: false` and a clear `unavailableReason`, and excluded from estimated subtotals.
+5. **No Inventory Modification:** Cart operations strictly **do not** reserve, hold, or alter inventory. Physical, reserved, and available stock remain completely unaffected. Checkout (Phase 6) performs independent inventory reservation.
+6. **Concurrency Protection:**
+   - Increments on existing items execute atomically via `$inc: { "items.$.quantity": delta }`.
+   - New items are added with duplicate protection via query `{ user: userId, "items.product": { $ne: productId } }` and `$push`. Concurrent requests fall back to `$inc`, ensuring zero duplicate lines and zero lost increments.
+
+### 6.2 Delivery Address Book Architecture
+The address module (`src/modules/addresses/`) implements customer-owned shipping address management:
+
+1. **Strict Ownership Scoping:** All operations enforce ownership filtering equivalent to `{ _id: addressId, user: req.user._id }`. Client-supplied user IDs are stripped and rejected.
+2. **Single Default Address Invariant:**
+   - Enforced at the database engine level via `{ user: 1 }` with `unique: true, partialFilterExpression: { isDefault: true }`.
+   - Guarantees that no customer can ever have more than one default address even under concurrent race conditions.
+3. **First-Address Default Policy:** The customer's first created address automatically receives `isDefault: true`.
+4. **Default Promotion on Deletion:** Deleting the current default address automatically promotes the customer's most recently created remaining address to default inside a MongoDB transaction. If no addresses remain, the collection cleanly reflects zero addresses without errors.
+5. **Deterministic Ordering:** Listing endpoints return addresses with the default address first (`isDefault: -1`), followed by newest created addresses (`createdAt: -1`).
+
+---
+
+## 7. Unresolved Decisions & Safe Defaults
 
 | Decision Area | Unresolved Aspect | Chosen Safe Default for V1 |
 | :--- | :--- | :--- |

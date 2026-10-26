@@ -227,5 +227,33 @@ All inventory endpoints require `authenticate` and `authorize('admin')`.
 - **Sanitized Errors:** Internal database error messages and stack traces are suppressed in production.
 - **Log Redaction:** Passwords, tokens, cookies, and credit cards are automatically redacted in structured logs.
 
+---
+
+## 10. Shopping Cart & Delivery Address Management (Phase 5)
+
+All cart and address endpoints require both `authenticate` and `authorize('customer')`. Ownership is strictly derived from the authenticated request context (`req.user._id`), preventing Broken Object Level Authorization (BOLA/IDOR).
+
+### Shopping Cart Endpoints:
+- `GET /api/v1/cart`: Retrieve customer cart. Dynamically calculates line totals and unit prices from active Product records and evaluates storefront availability (`isAvailableForPurchase`). Flags all totals with `isAuthoritative: false`.
+- `POST /api/v1/cart/items`: Add product line or atomically increment existing line. Enforces integer quantity bounds (`1` through `99`), product publication status, active category requirement, and available stock validation.
+- `PATCH /api/v1/cart/items/:productId`: Update requested item quantity (`1` through `99`). Validates catalog eligibility and stock.
+- `DELETE /api/v1/cart/items/:productId`: Remove line from cart (succeeds even if product was archived or unlisted).
+- `DELETE /api/v1/cart`: Clear all items from the customer cart.
+
+### Delivery Address Book Endpoints:
+- `GET /api/v1/addresses`: List authenticated customer's delivery addresses, deterministically ordered with default address first, followed by newest additions.
+- `POST /api/v1/addresses`: Add new delivery address. First address automatically becomes default (`isDefault: true`). Subsequent addresses default to `false` unless explicitly specified.
+- `PATCH /api/v1/addresses/:id`: Update owned address fields (`recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, `country`). Owner ID cannot be changed.
+- `PATCH /api/v1/addresses/:id/default`: Set target address as customer's default address within an atomic transaction.
+- `DELETE /api/v1/addresses/:id`: Delete owned address. If deleted address was the default, automatically promotes newest remaining address to default within a transaction.
+
+### Core Business Rules & Invariants:
+1. **Non-Authoritative Pricing:** Authoritative pricing is never stored in cart items. Cart calculations are informational; Phase 6 checkout independently recalculates all authoritative order lines.
+2. **Catalog Drift Resilience:** Products unpublished or archived while in a cart are not silently deleted; they are preserved with `isAvailableForPurchase: false` and a descriptive reason.
+3. **Zero Stock Mutation:** Cart operations strictly never alter product physical, reserved, or available stock.
+4. **Single Default Address Invariant:** Database-level partial unique index on `{ user: 1 }` (`partialFilterExpression: { isDefault: true }`) guarantees that a customer can never have multiple default addresses under concurrent requests.
+5. **Ownership Scoping:** Address queries always scope by `{ _id: addressId, user: req.user._id }`. Cross-user tampering yields `404 Not Found`.
+
+
 
 

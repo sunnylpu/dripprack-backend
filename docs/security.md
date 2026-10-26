@@ -148,3 +148,43 @@ Every incoming HTTP request generates or propagates an `X-Request-Id` UUID heade
    - No `PATCH`, `PUT`, or `DELETE` endpoints exist for movement logs.
    - Snapshot SKUs preserve original SKU values across subsequent catalog updates.
 
+---
+
+## 7. Shopping Cart & Delivery Address Security Controls (Phase 5)
+
+1. **Strict Customer-Only Authorization:**
+   - Every route under `/api/v1/cart` and `/api/v1/addresses` requires both `authenticate` and `authorize('customer')` middleware.
+   - Unauthenticated requests return `401 Unauthorized` (`UNAUTHORIZED`).
+   - Admin users or tokens with mismatched roles return `403 Forbidden` (`FORBIDDEN`).
+
+2. **Strict Ownership Scoping (Anti-IDOR / Anti-BOLA):**
+   - Resource ownership is derived exclusively from the authenticated session context (`req.user._id`).
+   - Client-supplied `user`, `userId`, `owner`, or `customerId` fields in query params or request bodies are strictly rejected or stripped by `.strict()` Zod schemas.
+   - All address mutations and queries scope by user: `{ _id: addressId, user: req.user._id }`.
+   - Attempting to inspect, modify, set as default, or delete another user's address returns `404 Not Found` (`ADDRESS_NOT_FOUND`) without leaking resource existence or metadata.
+   - Cart documents are uniquely keyed to the authenticated customer (`{ user: 1 }`), preventing cross-customer access.
+
+3. **Client Price Tampering & Non-Authoritative Price Isolation:**
+   - The Cart document schema deliberately omits price, discount, or subtotal fields. It stores only `product` ObjectId references, `quantity` (1–99), and timestamps.
+   - No client payload can inject prices, discounts, or inventory counts into a cart.
+   - Cart read operations dynamically resolve unit prices from active Product records and flag calculated subtotals with `isAuthoritative: false`.
+   - Checkout (Phase 6) operates as the sole authority on order pricing and promotions.
+
+4. **Input Validation, Type Safety & Mass Assignment Defense:**
+   - All cart and address request schemas enforce `.strict()`, rejecting unexpected keys and preventing MongoDB operator injection (`$gt`, `$ne`, etc.).
+   - Product and address IDs are validated against strict 24-character hexadecimal MongoDB ObjectId patterns.
+   - Quantities are strictly enforced as integers in the range `[1, 99]`. Non-integers, negative numbers, zero, and out-of-range quantities return `400 Bad Request` (`VALIDATION_ERROR`).
+   - Address fields are length-limited (recipient name, street, city, state: 100–150 chars). Country is enforced as a 2-letter uppercase ISO code (`/^[A-Z]{2}$/`). Postal codes and phone numbers are validated against flexible international formats without exposing ReDoS vulnerabilities.
+
+5. **PII Protection & Sensitive Data Hygiene:**
+   - Customer recipient names, physical delivery addresses, and phone numbers are classified as Personally Identifiable Information (PII).
+   - Application logger configuration redacts sensitive headers, cookies, and tokens.
+   - Address mutation logs do not serialize full street address or phone details to application log files.
+
+6. **Database Invariant Integrity & Concurrency Safeguards:**
+   - Single default address per customer is enforced at the database engine level using a partial unique index: `{ user: 1 }` with `partialFilterExpression: { isDefault: true }`.
+   - Default address switches and default promotions during deletion execute inside MongoDB multi-document transactions (`session.withTransaction`), guaranteeing consistent state transitions.
+   - Cart item modifications utilize atomic `$inc` updates and atomic `$push` with `{ 'items.product': { $ne: productId } }`, preventing duplicate product lines and preventing race conditions during concurrent additions.
+
+
+

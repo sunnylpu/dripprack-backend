@@ -165,12 +165,14 @@ Customer-owned shopping cart. Prices are **not** stored authoritatively; only it
 | :--- | :--- | :--- | :--- |
 | `_id` | ObjectId | Yes | Auto Primary Key |
 | `user` | ObjectId | Yes | Ref to `User`, unique (one cart per customer) |
-| `items` | Array | Yes | Sub-documents: `[{ product: ObjectId, quantity: Number, addedAt: Date }]` |
+| `items` | Array | Yes | Sub-documents: `[{ _id: ObjectId, product: ObjectId, quantity: Number, addedAt: Date }]` |
+| `createdAt` | Date | Yes | Timestamp |
 | `updatedAt` | Date | Yes | Timestamp |
 
 **Constraints:**
 - Item `quantity` must be positive integer ($1 \le q \le 99$).
-- Unique compound sub-document index ensures no duplicate product entries in the same cart.
+- Sub-document validator and atomic `$ne` update queries ensure no duplicate product entries in the same cart.
+- Non-authoritative: Checkout (Phase 6) recalculates all amounts independently. Zero inventory mutations occur on cart operations.
 
 **Indexes:**
 - `{ user: 1 }` (Unique)
@@ -185,20 +187,21 @@ Customer-owned delivery address book.
 | :--- | :--- | :--- | :--- |
 | `_id` | ObjectId | Yes | Auto Primary Key |
 | `user` | ObjectId | Yes | Ref to `User`, indexed |
-| `recipientName` | String | Yes | Max 100 chars |
-| `phone` | String | Yes | E.164 or national phone format |
-| `streetAddress1`| String | Yes | Max 150 chars |
-| `streetAddress2`| String | No | Max 150 chars |
-| `city` | String | Yes | Max 100 chars |
-| `state` | String | Yes | Max 100 chars |
-| `postalCode` | String | Yes | Postal/Zip code |
-| `country` | String | Yes | ISO 2-letter country code (e.g. 'US', 'IN') |
-| `isDefault` | Boolean | Yes | Default: `false` |
+| `recipientName` | String | Yes | Max 100 chars, trimmed |
+| `phone` | String | Yes | E.164 or national phone format (7-25 chars) |
+| `streetAddress1`| String | Yes | Max 150 chars, trimmed |
+| `streetAddress2`| String | No | Max 150 chars, default: `''` |
+| `city` | String | Yes | Max 100 chars, trimmed |
+| `state` | String | Yes | Max 100 chars, trimmed |
+| `postalCode` | String | Yes | Postal/Zip code string (2-20 chars, preserves leading zeros) |
+| `country` | String | Yes | ISO 2-letter uppercase country code (e.g. `'US'`, `'IN'`) |
+| `isDefault` | Boolean | Yes | Default: `false` (First created address is automatically `true`) |
 | `createdAt` | Date | Yes | Timestamp |
 | `updatedAt` | Date | Yes | Timestamp |
 
 **Indexes:**
-- `{ user: 1, isDefault: 1 }`
+- `{ user: 1, isDefault: -1, createdAt: -1 }` (Deterministic user listing: default address first, then newest)
+- `{ user: 1 }` (`unique: true, partialFilterExpression: { isDefault: true }`) (Enforces database-level constraint: at most one default address per customer)
 
 ---
 
