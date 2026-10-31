@@ -272,6 +272,7 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
         description: 'Limited edition',
         category: activeCategory._id,
         priceCents: 2500,
+        attributes: { size: 'L', color: 'White' },
         status: 'published',
         stock: { physical: 2, reserved: 0, available: 2 }
       });
@@ -403,6 +404,7 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
       expect(order.totalCents).toBe(5000);
       expect(order.items).toHaveLength(1);
       expect(order.items[0].sku).toBe('DRIP-TEE-WHT');
+      expect(order.items[0].attributes).toEqual({ size: 'L', color: 'White' });
       expect(order.items[0].quantity).toBe(2);
       expect(order.shippingAddress.recipientName).toBe('Alice Customer');
 
