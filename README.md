@@ -70,7 +70,11 @@ backend/
 
 ---
 
-## 3. Quick Start & Setup
+## Storefront API Contract
+
+The implemented customer API contract, request/response examples, customer session rules, product SKU model, cart/address/checkout/order flows, and explicit V1 limitations are documented in [docs/storefront-api-contract.md](docs/storefront-api-contract.md). Keep that document aligned with route validators, controllers, services, and models whenever an API changes.
+
+${link}
 
 ### Prerequisites
 - Node.js >= 20.0.0
@@ -159,18 +163,21 @@ npm run seed:admin
 ## 6. Authentication & Session Management (Phase 2)
 
 ### Endpoints:
-- `POST /api/v1/auth/register`: Customer registration (strictly assigns `customer` role, strips unrecognized inputs).
-- `POST /api/v1/auth/login`: Authenticates credentials, returns short-lived JWT access token in response body, and sets HttpOnly `refreshToken` cookie.
-- `POST /api/v1/auth/refresh`: Rotates refresh token, invalidates previous session verifier, detects reuse attacks, and issues new token pair.
-- `POST /api/v1/auth/logout`: Revokes session in database and clears the HttpOnly cookie.
-- `GET /api/v1/auth/me`: Returns authenticated customer or admin profile. Protected by `authenticate` middleware.
+- `POST /api/v1/auth/register`: Public registration. Always creates a customer and does not automatically log the customer in.
+- `POST /api/v1/auth/customer/login`: Customer sign-in and customer refresh-cookie issuance.
+- `POST /api/v1/auth/admin/login`: Admin sign-in and admin refresh-cookie issuance.
+- `POST /api/v1/auth/customer/refresh` and `POST /api/v1/auth/admin/refresh`: Rotate only the matching application's refresh session.
+- `POST /api/v1/auth/customer/logout` and `POST /api/v1/auth/admin/logout`: Revoke and clear only the selected application's refresh session.
+- The generic `/auth/login`, `/auth/refresh`, and `/auth/logout` routes are also supported when the request sends `X-App-Client: customer` or `X-App-Client: admin`.
+- `GET /api/v1/auth/me`: Returns the authenticated profile from the supplied Bearer access token.
 
 ### Browser & Cookie Security:
-- **HttpOnly Cookies:** Refresh tokens are never accessible to client-side JavaScript, mitigating XSS token theft.
-- **Strict Path Scoping:** Refresh cookie is scoped to `Path=/api/v1/auth`.
-- **SameSite Policy:** `SameSite=Strict` in production (`Lax` in development).
-- **CSRF Defense:** `verifyCsrfOrigin` middleware ensures state-changing cookie endpoints match the configured CORS allowlist.
-- **Reuse Detection:** Replaying a revoked refresh token immediately invalidates all active sessions for that user.
+- **Independent HttpOnly Cookies:** Admin uses `adminRefreshToken`; customer storefront uses `customerRefreshToken`. The two cookie names keep both sessions independent in one browser.
+- **Cookie Path:** Both cookies are scoped to `Path=/api/v1/auth`.
+- **Application Context:** The browser clients send `X-App-Client: admin` or `X-App-Client: customer` on requests. Context selects the cookie; the authenticated account role is still checked and enforced server-side.
+- **SameSite / Secure:** Local development defaults to `SameSite=Lax`; production defaults to `SameSite=Strict`. Configure `COOKIE_SAME_SITE`, `COOKIE_SECURE`, and optional `COOKIE_DOMAIN` for the actual deployment topology. `SameSite=None` requires Secure cookies and HTTPS.
+- **CSRF Defense:** Refresh/logout routes use `verifyCsrfOrigin` against the configured CORS allowlist.
+- **Reuse Detection:** Replaying a revoked refresh token invalidates all active sessions for that user.
 
 ---
 
@@ -187,7 +194,9 @@ npm run seed:admin
 - `GET /api/v1/products`: Public paginated catalog with keyword search (`q`), category filtering, availability filtering (`inStock`), and allowlisted sorting.
 - `GET /api/v1/products/:idOrSlug`: Public lookup by MongoDB ID or unique URL slug.
 - `POST /api/v1/products`: Administrator product creation (initial status defaults to `draft`, stock defaults to 0).
-- `PATCH /api/v1/products/:id`: Administrator updates to catalog fields.
+- `PATCH /api/v1/products/:id`: Administrator updates to catalog fields, including optional `attributes.size` and `attributes.color`.
+- **V1 SKU decision:** Each size/colour combination is a separate sellable Product record with its own SKU, slug, price, and stock ledger. Attributes are descriptive values; no parent-product variant-group endpoint exists.
+- **Images:** Product images are HTTPS URL strings; there is no binary image-upload endpoint.
 - `PATCH /api/v1/products/:id/status`: Administrator status transitions (`draft`, `published`, `archived`).
 - `GET /api/v1/admin/products`: Administrator product listing across all statuses.
 - `GET /api/v1/admin/products/:id`: Administrator detail lookup across all statuses.
