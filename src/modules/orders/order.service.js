@@ -111,6 +111,7 @@ export const orderService = {
         product: product._id,
         sku: product.sku,
         name: product.name,
+        attributes: product.attributes || { size: null, color: null },
         quantity: item.quantity,
         unitPriceCents,
         lineTotalCents
@@ -255,6 +256,7 @@ export const orderService = {
             product: product._id,
             sku: product.sku,
             name: product.name,
+            attributes: product.attributes || { size: null, color: null },
             unitPriceCents,
             quantity: item.quantity,
             lineTotalCents
