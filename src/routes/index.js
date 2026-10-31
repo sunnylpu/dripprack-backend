@@ -10,6 +10,7 @@ import addressRoutes from '../modules/addresses/address.routes.js';
 import adminRoutes from '../modules/admin/admin.routes.js';
 import orderRoutes from '../modules/orders/order.routes.js';
 import paymentRoutes from '../modules/payments/payment.routes.js';
+import { isOnlinePaymentsOperational } from '../modules/payments/payment.gateway.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 
 const router = Router();
@@ -40,8 +41,8 @@ router.get('/config', (req, res) => {
       taxRatePercent: env.TAX_RATE_PERCENT,
       payments: {
         codEnabled: true,
-        onlineEnabled: env.ENABLE_ONLINE_PAYMENTS,
-        provider: env.ENABLE_ONLINE_PAYMENTS ? env.PAYMENT_PROVIDER : 'cod'
+        onlineEnabled: isOnlinePaymentsOperational(),
+        provider: isOnlinePaymentsOperational() ? env.PAYMENT_PROVIDER : 'cod'
       }
     }
   });
