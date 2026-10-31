@@ -219,8 +219,8 @@ describe('End-to-End Customer-to-Admin Order Lifecycle Verification', () => {
       .get('/api/v1/orders/my-orders')
       .set('Authorization', `Bearer ${customerToken}`);
     expect(customerOrdersRes.status).toBe(200);
-    expect(customerOrdersRes.body.data).toHaveLength(1);
-    expect(customerOrdersRes.body.data[0].orderReference).toBe(orderReference);
+    expect(customerOrdersRes.body.data.orders).toHaveLength(1);
+    expect(customerOrdersRes.body.data.orders[0].orderReference).toBe(orderReference);
 
     // 15. Customer views single order detail
     const customerOrderDetailRes = await request(app)

@@ -194,6 +194,16 @@ export class StripePaymentGateway {
   }
 }
 
+/**
+ * Online payment is not operational in this V1 build: the Stripe adapter is a
+ * deliberate stub and does not create real provider intents. Keep the storefront
+ * configuration and order creation gate closed until a real SDK-backed adapter
+ * and webhook verification flow are implemented and tested.
+ */
+export function isOnlinePaymentsOperational() {
+  return false;
+}
+
 // Active gateway reference with injection mechanism for tests
 let activeGateway = null;
 

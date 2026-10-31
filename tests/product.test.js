@@ -110,6 +110,23 @@ describe('Phase 3: Product Catalog & Management Test Suite', () => {
       expect(res.body.data.product.stock.available).toBe(0);
     });
 
+    it('should persist structured size and color attributes for each sellable SKU', async () => {
+      const res = await request(app)
+        .post('/api/v1/products')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          ...validProductPayload,
+          category: activeCategory._id.toString(),
+          attributes: { size: 'M', color: 'Vintage Black' }
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.product.attributes).toEqual({
+        size: 'M',
+        color: 'Vintage Black'
+      });
+    });
+
     it('should prevent inventory tampering and ignore stock parameters in creation payload', async () => {
       const maliciousPayload = {
         ...validProductPayload,
@@ -218,6 +235,20 @@ describe('Phase 3: Product Catalog & Management Test Suite', () => {
       expect(res.status).toBe(200);
       expect(res.body.data.product.priceCents).toBe(9000);
       expect(res.body.data.product.name).toBe('Updated Boxy Hoodie');
+    });
+
+    it('should update size and color attributes without changing inventory', async () => {
+      const res = await request(app)
+        .patch(`/api/v1/products/${createdProduct._id}`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({ attributes: { size: 'L', color: 'Washed Grey' } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.product.attributes).toEqual({
+        size: 'L',
+        color: 'Washed Grey'
+      });
+      expect(res.body.data.product.stock.available).toBe(0);
     });
 
     it('should strictly ignore and reject stock modifications in update payload', async () => {
@@ -362,6 +393,16 @@ describe('Phase 3: Product Catalog & Management Test Suite', () => {
       const resId = await request(app).get(`/api/v1/products/${publishedProduct._id}`);
       expect(resId.status).toBe(200);
       expect(resId.body.data.product.sku).toBe('PUB-PROD-01');
+    });
+
+    it('does not expose physical or reserved warehouse counts in public product details', async () => {
+      const res = await request(app).get(`/api/v1/products/${publishedProduct.slug}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.product.stock.available).toBe(10);
+      expect(res.body.data.product.stock.physical).toBeUndefined();
+      expect(res.body.data.product.stock.reserved).toBeUndefined();
+      expect(res.body.data.product.lowStockThreshold).toBeUndefined();
     });
 
     it('GET /api/v1/products/:idOrSlug should return 404 for draft products', async () => {

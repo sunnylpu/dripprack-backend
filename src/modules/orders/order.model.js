@@ -19,6 +19,10 @@ const orderItemSnapshotSchema = new mongoose.Schema(
       required: [true, 'Product name snapshot is required'],
       trim: true
     },
+    attributes: {
+      size: { type: String, trim: true, default: null, maxlength: 50 },
+      color: { type: String, trim: true, default: null, maxlength: 50 }
+    },
     unitPriceCents: {
       type: Number,
       required: [true, 'Unit price in cents is required'],

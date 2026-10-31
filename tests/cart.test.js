@@ -156,6 +156,7 @@ describe('Phase 5: Shopping Cart Management Test Suite', () => {
         description: 'Heavyweight streetwear t-shirt',
         category: activeCategory._id,
         priceCents: 4500,
+        attributes: { size: 'M', color: 'Black' },
         status: 'published',
         stock: { physical: 50, reserved: 0, available: 50 }
       });
@@ -185,6 +186,7 @@ describe('Phase 5: Shopping Cart Management Test Suite', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.cart.items.length).toBe(1);
       expect(res.body.data.cart.items[0].product._id).toBe(product1._id.toString());
+      expect(res.body.data.cart.items[0].product.attributes).toEqual({ size: 'M', color: 'Black' });
       expect(res.body.data.cart.items[0].quantity).toBe(2);
       expect(res.body.data.cart.items[0].unitPriceCents).toBe(4500);
       expect(res.body.data.cart.items[0].lineTotalCents).toBe(9000);
