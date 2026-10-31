@@ -373,6 +373,7 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
         description: 'Classic oversized tee',
         category: activeCategory._id,
         priceCents: 2500,
+        attributes: { size: 'L', color: 'White' },
         status: 'published',
         stock: { physical: 10, reserved: 0, available: 10 }
       });
