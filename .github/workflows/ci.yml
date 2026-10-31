@@ -10,6 +10,12 @@ jobs:
   test:
     name: Run Backend Test Suite
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      COOKIE_SECRET: ci-only-cookie-secret-minimum-32
+      MONGODB_URI: mongodb://127.0.0.1:27017/driprack_ci
+      JWT_ACCESS_SECRET: ci-access-secret-minimum-32-characters-long
+      JWT_REFRESH_SECRET: ci-refresh-secret-minimum-32-characters-long
 
     steps:
       - name: Checkout repository

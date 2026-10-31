@@ -15,10 +15,15 @@ import { InventoryMovement } from '../src/modules/inventory/inventoryMovement.mo
 import {
   setPaymentGateway,
   resetPaymentGateway,
-  MockPaymentGateway
+  MockPaymentGateway,
+  isOnlinePaymentsOperational
 } from '../src/modules/payments/payment.gateway.js';
 
 describe('Phase 6: Payment Foundation & Webhooks Test Suite', () => {
+  it('keeps online payments disabled while the production Stripe adapter is a stub', () => {
+    expect(isOnlinePaymentsOperational()).toBe(false);
+  });
+
   let replSet;
   let customerUser;
   let customerToken;

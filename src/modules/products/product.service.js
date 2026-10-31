@@ -68,6 +68,7 @@ export const productService = {
 
     const [products, total] = await Promise.all([
       Product.find(filter)
+        .select('sku slug name description category priceCents compareAtPriceCents images attributes status stock.available createdAt updatedAt')
         .populate('category', 'name slug')
         .sort(sort)
         .skip(skip)
@@ -88,7 +89,9 @@ export const productService = {
     const product = await Product.findOne({
       ...lookup,
       status: 'published'
-    }).populate('category', 'name slug isActive');
+    })
+      .select('sku slug name description category priceCents compareAtPriceCents images attributes status stock.available createdAt updatedAt')
+      .populate('category', 'name slug isActive');
 
     // Must be found, published, and category must exist and be active
     if (!product || !product.category || !product.category.isActive) {

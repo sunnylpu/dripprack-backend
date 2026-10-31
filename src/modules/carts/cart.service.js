@@ -82,6 +82,7 @@ export const cartService = {
           _id: product._id,
           sku: product.sku,
           name: product.name,
+          attributes: product.attributes || { size: null, color: null },
           slug: product.slug,
           images: product.images,
           priceCents: product.priceCents,
