@@ -682,7 +682,7 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
         .set('Authorization', `Bearer ${customerAToken}`);
 
       expect(resA.status).toBe(200);
-      expect(resA.body.data).toHaveLength(2);
+      expect(resA.body.data.orders).toHaveLength(2);
       expect(resA.body.meta.total).toBe(2);
 
       // Fetch Customer B history
@@ -691,7 +691,7 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
         .set('Authorization', `Bearer ${customerBToken}`);
 
       expect(resB.status).toBe(200);
-      expect(resB.body.data).toHaveLength(1);
+      expect(resB.body.data.orders).toHaveLength(1);
       expect(resB.body.meta.total).toBe(1);
     });
 
