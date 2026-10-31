@@ -284,7 +284,7 @@ Phase 6 implements server-authoritative checkout quotes, atomic multi-document o
 1. **Zero Overselling Guarantee:** Stock is conditionally reserved at the database engine level (`{ 'stock.available': { $gte: quantity } }`). Concurrent checkout races can never oversell or drive available stock below zero.
 2. **Snapshot Fidelity:** Created orders store frozen copies of SKUs, names, unit prices, line totals, and delivery addresses. Subsequent edits to products or addresses never alter historical order records.
 3. **Idempotency with Payload Hashing:** Replays with matching key and identical payload safely return the canonical order (200 OK). Replays with modified payloads return `409 Conflict` (`IDEMPOTENCY_CONFLICT`).
-4. **Safe Payment Defaults:** Cash on Delivery (COD) is the active V1 payment method. Online payments remain disabled by default (`ENABLE_ONLINE_PAYMENTS = false`) until genuine credentials are provided.
+4. **Safe Payment Defaults:** Cash on Delivery (COD) is the only operational V1 checkout method. The current Stripe adapter is a stub; the public config therefore always reports `onlineEnabled: false`, and order placement rejects online payments outside automated test mode even if `ENABLE_ONLINE_PAYMENTS` is mistakenly set. A real SDK-backed provider integration and webhook validation must be completed before enabling online payments.
 
 ---
 
