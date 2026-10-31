@@ -1,64 +1,154 @@
-# DripRack Storefront API Contract & Client Integration Guide
+# DripRack Storefront API Contract
 
-**Specification Version:** 1.0.0  
-**Target Systems:** DripRack Customer Storefront (`client_frontend`), DripRack Backend (`backend`), DripRack Admin Portal (`admin_frontend`)  
-**Status:** Canonical & Storefront-Ready  
+**Contract version:** 1.1.0  
+**Applies to:** Backend, Admin Frontend, and the planned Customer Frontend  
+**Source of truth:** Implemented routes, Zod validators, controllers, services, and Mongoose models in this repository.
 
----
+> This document describes the current implementation, not a proposed API. All paths below are relative to `/api/v1`. Do not substitute alternative field names or infer unsupported endpoints.
 
-## 1. Overview & Architectural Principles
+## 1. Local applications and request conventions
 
-The DripRack Storefront API delivers high-performance e-commerce capabilities designed around zero client-side token exposure, atomic inventory reservations, integer-cents financial precision, and complete session isolation from the administrative backoffice.
+| Application | Local origin | API base URL | Application header |
+|---|---|---|---|
+| Backend | `http://localhost:5000` | `http://localhost:5000/api/v1` | — |
+| Admin frontend | `http://localhost:5173` | Same backend API URL | `X-App-Client: admin` |
+| Customer frontend | `http://localhost:5174` | Same backend API URL | `X-App-Client: customer` |
 
-### Core Architectural Guarantees
+Both browser applications must send `credentials: 'include'` on requests so the browser can receive and send the HttpOnly refresh cookie. Send `Authorization: Bearer <accessToken>` on authenticated requests. Send `X-App-Client` on all customer/admin API requests; it is essential on authentication login, refresh, and logout requests to select the right refresh-cookie family.
 
-1. **Dual-Cookie Session Isolation:**
-   - The Storefront interacts using the `customerRefreshToken` cookie, completely isolated from administrative sessions (`adminRefreshToken`).
-   - The Storefront must transmit the header `X-App-Client: customer` on all requests.
-2. **In-Memory JWT Token Architecture:**
-   - Short-lived Access Tokens (15 minutes) are held strictly in browser JavaScript runtime memory.
-   - **Never store access tokens or sensitive credentials in `localStorage` or `sessionStorage`**.
-   - Silent background refresh uses the `HttpOnly`, `SameSite=Lax` (or `None` over HTTPS), `Path=/` refresh cookie.
-3. **Integer Cents Monetary Precision:**
-   - All prices, discounts, taxes, shipping fees, and totals are represented as non-negative integer cents ($19.99 is encoded as `1999`). Decimal currency values are never transmitted across the API boundary.
-4. **V1 SKU & Product Model:**
-   - Every sellable size and color variant operates as an autonomous `Product` record with its own unique `sku`, dedicated stock ledger (`physicalStock`, `reservedStock`, `availableStock`), individual price, slug, and category association.
-5. **ACID Stock Reservations:**
-   - Checkout is backed by MongoDB multi-document ACID transactions. Placing an order reserves inventory immediately (`physicalStock` unchanged, `reservedStock` incremented, `availableStock` decremented) to prevent overselling.
+The backend CORS allowlist is configured by `CORS_ORIGIN`. It must contain the exact deployed origins for both frontends. Credentialed requests must never use wildcard CORS origins. Allowed custom headers include `Authorization`, `Idempotency-Key`, `X-Request-Id`, `X-App-Client`, and `X-Client-Type`.
 
----
+## 2. Response and error envelopes
 
-## 2. Ports, Base URLs & Development Environment
+Successful responses use this envelope:
 
-| Service | Local Host / Port | Environment Base URL | Client Type Header |
-| :--- | :--- | :--- | :--- |
-| **Backend REST API** | `http://localhost:5000` | `http://localhost:5000/api/v1` | `X-App-Client: customer` |
-| **Admin Portal** | `http://localhost:5173` | `http://localhost:5173` | `X-App-Client: admin` |
-| **Customer Storefront** | `http://localhost:5174` | `http://localhost:5174` | `X-App-Client: customer` |
-
-### Environment Variables for Storefront (`client_frontend/.env`)
-```bash
-VITE_API_BASE_URL=http://localhost:5000/api/v1
-VITE_CLIENT_TYPE=customer
-```
-
-### CORS & Cookie Requirements
-- **Credentials:** Every `fetch` or Axios request must configure `credentials: 'include'` to allow the browser to manage `customerRefreshToken`.
-- **Allowed Headers:** `Content-Type`, `Authorization`, `Idempotency-Key`, `X-App-Client`, `X-Client-Type`.
-
----
-
-## 3. Public Store Configuration
-
-The storefront must fetch store-wide business rules and payment toggles on initial application boot.
-
-### `GET /config`
-- **Authentication:** Public (No token required)
-- **Response `200 OK`:**
 ```json
 {
   "success": true,
-  "message": "Storefront public configuration retrieved successfully",
+  "statusCode": 200,
+  "message": "Success",
+  "data": {}
+}
+```
+
+Paginated endpoints put pagination metadata next to `data`, not inside each record:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Products retrieved successfully",
+  "data": { "products": [] },
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+Errors use:
+
+```json
+{
+  "success": false,
+  "statusCode": 422,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": [{ "field": "email", "message": "Invalid email address format" }]
+  }
+}
+```
+
+The exact error code and message depend on the validation/business rule. Clients should handle HTTP status and error code, and should not assume every error has a non-empty `details` array.
+
+## 3. Authentication and independent sessions
+
+### Refresh-cookie rules
+
+The backend issues two different HttpOnly cookies:
+
+| Application | Cookie name | Path |
+|---|---|---|
+| Admin | `adminRefreshToken` | `/api/v1/auth` |
+| Customer | `customerRefreshToken` | `/api/v1/auth` |
+
+Cookies are HttpOnly and are never returned as JSON values. The default local SameSite policy is Lax. The default production SameSite policy is Strict. `COOKIE_SAME_SITE`, `COOKIE_SECURE`, and optional `COOKIE_DOMAIN` configure deployments. For a genuinely cross-site frontend/API deployment, use `COOKIE_SAME_SITE=none` together with Secure cookies over HTTPS. Do not use SameSite=None over plain HTTP.
+
+Access JWTs are short-lived and must be held only in application memory. Do not store access tokens or refresh tokens in localStorage or sessionStorage.
+
+### Customer registration
+
+**POST `/auth/register`**  
+Authentication: public. Creates a customer account; the submitted role/status cannot elevate privileges.
+
+Request body:
+
+```json
+{
+  "email": "customer@example.com",
+  "password": "SecurePassword123!",
+  "firstName": "Alex",
+  "lastName": "Vance"
+}
+```
+
+Password constraints: 8–100 characters and must include lowercase, uppercase, a digit, and a special character.
+
+Success: HTTP 201, `data.user` contains the sanitized user profile. Registration does not automatically log the customer in and does not set a refresh cookie.
+
+### Login
+
+**Customer:** POST `/auth/customer/login`  
+Alternatively: POST `/auth/login` with `X-App-Client: customer`.
+
+**Admin:** POST `/auth/admin/login`  
+Alternatively: POST `/auth/login` with `X-App-Client: admin`.
+
+Request body for either:
+
+```json
+{
+  "email": "customer@example.com",
+  "password": "SecurePassword123!"
+}
+```
+
+Success: HTTP 200 with `data.accessToken` and `data.user`. The appropriate application-specific cookie is set. A customer-context login rejects an admin account; an admin-context login rejects a customer account. Registration remains customer-only.
+
+### Refresh
+
+**Customer:** POST `/auth/customer/refresh` or POST `/auth/refresh` with `X-App-Client: customer`.  
+**Admin:** POST `/auth/admin/refresh` or POST `/auth/refresh` with `X-App-Client: admin`.
+
+Body: none. Send the appropriate cookie automatically with credentials enabled. Success: HTTP 200 with a new `data.accessToken` and `data.user`; refresh cookie rotation occurs in the response.
+
+### Logout
+
+**Customer:** POST `/auth/customer/logout` or POST `/auth/logout` with `X-App-Client: customer`.  
+**Admin:** POST `/auth/admin/logout` or POST `/auth/logout` with `X-App-Client: admin`.
+
+Body: none. The backend revokes the selected refresh session and clears only the corresponding application cookie. Refresh/logout endpoints enforce the configured CSRF origin check.
+
+### Current profile
+
+**GET `/auth/me`**  
+Authentication: Bearer access token. Returns `data.user`. Customer UI must verify `role === "customer"`; admin UI must verify `role === "admin"` and active account status. Backend RBAC remains authoritative.
+
+## 4. Public store configuration
+
+**GET `/config`**  
+Authentication: public. No query or body.
+
+Current response:
+
+```json
+{
+  "success": true,
   "data": {
     "currency": "USD",
     "shipping": {
@@ -75,623 +165,252 @@ The storefront must fetch store-wide business rules and payment toggles on initi
 }
 ```
 
----
+Values come from backend environment configuration. The example shows current defaults; the live response is authoritative. Do not hardcode currency, shipping charges, tax, or online-payment availability in the client application. No secret keys are returned.
 
-## 4. Customer Authentication & Session Management
+## 5. Public categories and products
 
-### Cookie Specifications
-- **Cookie Name:** `customerRefreshToken`
-- **Flags:** `HttpOnly`, `Path=/`, `SameSite=Lax` (development) / `SameSite=None; Secure` (production cross-origin).
-- **Expiration:** 7 days rolling.
+### Categories
 
----
+**GET `/categories`**  
+Authentication: public. Returns `data.categories`, containing active categories only. Public category listing is not paginated.
 
-### `POST /auth/register`
-Creates a new customer profile. Mass-assignment protection guarantees only `customer` role accounts are created.
+**GET `/categories/:id`**  
+Authentication: public. Requires a MongoDB category ObjectId, not a slug. Returns `data.category`; inactive or missing categories return 404.
 
-- **Request Body:**
+Category records use fields such as `_id`, `name`, `slug`, `description`, and `isActive`.
+
+### Product listing
+
+**GET `/products`**  
+Authentication: public.
+
+Supported query parameters:
+
+| Parameter | Meaning |
+|---|---|
+| `page` | 1-based page number; default 1 |
+| `limit` | Page size; default 20, maximum 100 |
+| `q` | Search product name or description |
+| `category` | Active category ObjectId or category slug |
+| `inStock` | `true` for available stock above zero; `false` for zero available stock |
+| `sortBy` | `name:asc`, `name:desc`, `priceCents:asc`, `priceCents:desc`, `createdAt:asc`, or `createdAt:desc`; default `createdAt:desc` |
+
+Response: `data.products` plus top-level `meta`. Public products are filtered to `status: "published"` and active categories. Each product uses the actual model field names, including `name`, `slug`, `sku`, `description`, `priceCents`, `compareAtPriceCents`, `images`, `attributes`, `status`, and the public available-stock value.
+
+Example product record (abbreviated):
+
 ```json
 {
-  "email": "customer@example.com",
-  "password": "SecurePassword123!",
-  "firstName": "Alex",
-  "lastName": "Vance"
-}
-```
-- **Password Rules:** Minimum 8 characters, at least one uppercase letter, one lowercase letter, one number, and one special character (`!@#$%^&*`).
-- **Response `201 Created`:**
-```json
-{
-  "success": true,
-  "message": "Customer registered successfully",
-  "data": {
-    "user": {
-      "_id": "6724218a5f36e4a2a11b8991",
-      "email": "customer@example.com",
-      "firstName": "Alex",
-      "lastName": "Vance",
-      "role": "customer",
-      "status": "active",
-      "createdAt": "2026-11-01T00:00:00.000Z"
-    }
-  }
-}
-```
-
----
-
-### `POST /auth/login` (or `POST /auth/customer/login`)
-Authenticates customer credentials, issues an in-memory access token, and sets the `customerRefreshToken` cookie.
-
-- **Request Headers:**
-  - `Content-Type: application/json`
-  - `X-App-Client: customer`
-- **Request Body:**
-```json
-{
-  "email": "customer@example.com",
-  "password": "SecurePassword123!"
-}
-```
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "_id": "6724218a5f36e4a2a11b8991",
-      "email": "customer@example.com",
-      "firstName": "Alex",
-      "lastName": "Vance",
-      "role": "customer",
-      "status": "active"
-    }
-  }
-}
-```
-- **Set-Cookie Header:** `customerRefreshToken=<token>; Path=/; HttpOnly; SameSite=Lax`
-
----
-
-### `POST /auth/refresh` (or `POST /auth/customer/refresh`)
-Performs silent token rotation using the HttpOnly cookie.
-
-- **Request Headers:**
-  - `X-App-Client: customer`
-  - `Cookie: customerRefreshToken=<token>`
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Token refreshed successfully",
-  "data": {
-    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "_id": "6724218a5f36e4a2a11b8991",
-      "email": "customer@example.com",
-      "firstName": "Alex",
-      "lastName": "Vance",
-      "role": "customer"
-    }
-  }
-}
-```
-
----
-
-### `POST /auth/logout` (or `POST /auth/customer/logout`)
-Revokes the refresh token family in the database and clears the `customerRefreshToken` cookie without touching `adminRefreshToken`.
-
-- **Request Headers:**
-  - `X-App-Client: customer`
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Logged out successfully"
-}
-```
-- **Set-Cookie Header:** `customerRefreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
-
----
-
-### `GET /auth/me`
-Retrieves authenticated customer profile.
-
-- **Request Headers:**
-  - `Authorization: Bearer <accessToken>`
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "user": {
-      "_id": "6724218a5f36e4a2a11b8991",
-      "email": "customer@example.com",
-      "firstName": "Alex",
-      "lastName": "Vance",
-      "role": "customer",
-      "status": "active"
-    }
-  }
-}
-```
-
----
-
-## 5. Public Product Catalog & Categories
-
-### Product SKU & Variant Model Specification (V1)
-In V1, each sellable SKU is an individual product document in MongoDB with:
-- Unique `sku` (e.g. `DRIP-HOOD-BLK-M`, `DRIP-TEE-WHT-L`)
-- Unique `slug` (e.g. `oversized-drip-hoodie-black-m`)
-- Explicit variant metadata: `attributes: { size: "M", color: "Black" }`
-- Real-time stock availability: `availableStock = physicalStock - reservedStock`
-- Status filter: Public catalog queries return only `status: "active"`. Draft and archived products are automatically filtered out.
-
----
-
-### `GET /products`
-Queries active products with filtering, search, sorting, and pagination.
-
-- **Query Parameters:**
-  - `page` *(number, default: 1)*
-  - `limit` *(number, default: 20, max: 100)*
-  - `categoryId` *(string ObjectId, optional)*
-  - `search` *(string, optional, matches title and description)*
-  - `minPrice` *(integer cents, optional)*
-  - `maxPrice` *(integer cents, optional)*
-  - `sort` *(enum: `newest`, `price_asc`, `price_desc`, `title_asc`, `title_desc`, default: `newest`)*
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "products": [
-      {
-        "_id": "672422015f36e4a2a11b8999",
-        "title": "Heavyweight Boxy Hoodie - Vintage Black (M)",
-        "slug": "heavyweight-boxy-hoodie-vintage-black-m",
-        "description": "500 GSM custom fleece with drop-shoulder silhouette.",
-        "sku": "HWT-HD-VBLK-M",
-        "price": 8500,
-        "compareAtPrice": 11000,
-        "currency": "USD",
-        "category": {
-          "_id": "672420015f36e4a2a11b8801",
-          "name": "Hoodies",
-          "slug": "hoodies"
-        },
-        "images": [
-          {
-            "url": "https://cdn.driprack.internal/products/hoodie-black-front.jpg",
-            "alt": "Front view of heavyweight boxy hoodie in vintage black",
-            "isPrimary": true
-          }
-        ],
-        "availableStock": 14,
-        "isLowStock": false,
-        "status": "active"
-      }
-    ]
+  "_id": "672422015f36e4a2a11b8999",
+  "sku": "DRIP-HOODIE-BLK-M",
+  "slug": "heavyweight-boxy-hoodie-black-m",
+  "name": "Heavyweight Boxy Hoodie",
+  "description": "Heavyweight fleece hoodie.",
+  "category": {
+    "_id": "672420015f36e4a2a11b8801",
+    "name": "Hoodies",
+    "slug": "hoodies"
   },
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 1,
-    "totalPages": 1,
-    "hasNext": false,
-    "hasPrev": false
-  }
+  "priceCents": 8500,
+  "compareAtPriceCents": 11000,
+  "images": ["https://cdn.example.com/hoodie-front.jpg"],
+  "attributes": { "size": "M", "color": "Black" },
+  "status": "published",
+  "stock": { "available": 14 }
 }
 ```
 
----
+The public projection does not return physical or reserved warehouse counts, nor the low-stock threshold.
 
-### `GET /products/:id` (or `GET /products/slug/:slug`)
-Retrieves product details for a single product.
+### Product detail
 
-- **Response `200 OK`:**
+**GET `/products/:idOrSlug`**  
+Authentication: public. The same path accepts either a MongoDB ObjectId or the product slug. It is not a separate `/products/slug/:slug` route. Returns `data.product`. Draft, archived, missing, or inactive-category products return 404.
+
+### V1 size/colour/SKU decision
+
+V1 uses an **autonomous product record per sellable SKU**. Each size/colour combination must be created as its own product with its own unique SKU, slug, price, and inventory ledger. Optional `attributes` stores descriptive variant values:
+
 ```json
 {
-  "success": true,
-  "data": {
-    "product": {
-      "_id": "672422015f36e4a2a11b8999",
-      "title": "Heavyweight Boxy Hoodie - Vintage Black (M)",
-      "slug": "heavyweight-boxy-hoodie-vintage-black-m",
-      "description": "500 GSM custom fleece with drop-shoulder silhouette.",
-      "sku": "HWT-HD-VBLK-M",
-      "price": 8500,
-      "compareAtPrice": 11000,
-      "category": {
-        "_id": "672420015f36e4a2a11b8801",
-        "name": "Hoodies",
-        "slug": "hoodies"
-      },
-      "images": [
-        {
-          "url": "https://cdn.driprack.internal/products/hoodie-black-front.jpg",
-          "alt": "Front view",
-          "isPrimary": true
-        }
-      ],
-      "availableStock": 14,
-      "status": "active"
-    }
+  "attributes": {
+    "size": "M",
+    "color": "Vintage Black"
   }
 }
 ```
 
----
+This is not a parent-product/child-variant system. There is no endpoint that groups variant records or returns a complete set of sizes/colours for a parent. The storefront should treat each record as a sellable SKU; do not assume that shared attributes automatically create a selectable variant group.
 
-### `GET /categories`
-Lists all public active categories.
+Product image storage is currently an array of HTTPS URL strings. There is no built-in binary image upload endpoint in this API.
 
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "categories": [
-      {
-        "_id": "672420015f36e4a2a11b8801",
-        "name": "Hoodies",
-        "slug": "hoodies",
-        "description": "Premium streetwear hoodies and pullovers",
-        "parent": null,
-        "isActive": true
-      }
-    ]
-  }
-}
-```
+## 6. Customer cart
 
----
+All cart routes require an authenticated customer. Admin accounts are not authorized for customer cart operations.
 
-## 6. Shopping Cart Management (Customer Scoped)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/cart` | Get current customer's cart |
+| POST | `/cart/items` | Add a product or increment its quantity |
+| PATCH | `/cart/items/:productId` | Set quantity of a cart item |
+| DELETE | `/cart/items/:productId` | Remove one product |
+| DELETE | `/cart` | Clear the cart |
 
-The shopping cart is persisted in MongoDB, linked to the authenticated customer's account. Cart items are dynamically re-validated on fetch against current catalog prices and available stock.
+Add-item request:
 
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-
-### `GET /cart`
-Retrieves customer's current cart with calculated item subtotals and stock alert warnings.
-
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "cart": {
-      "_id": "672430005f36e4a2a11b9110",
-      "user": "6724218a5f36e4a2a11b8991",
-      "items": [
-        {
-          "product": {
-            "_id": "672422015f36e4a2a11b8999",
-            "title": "Heavyweight Boxy Hoodie - Vintage Black (M)",
-            "sku": "HWT-HD-VBLK-M",
-            "price": 8500,
-            "images": [
-              {
-                "url": "https://cdn.driprack.internal/products/hoodie-black-front.jpg",
-                "isPrimary": true
-              }
-            ],
-            "availableStock": 14,
-            "status": "active"
-          },
-          "quantity": 2,
-          "priceSnapshot": 8500,
-          "subtotalCents": 17000
-        }
-      ],
-      "totalItemCount": 2,
-      "subtotalCents": 17000
-    }
-  }
-}
-```
-
----
-
-### `POST /cart/items`
-Adds an item to the customer's cart or increments quantity if already present.
-
-- **Request Body:**
 ```json
 {
   "productId": "672422015f36e4a2a11b8999",
   "quantity": 1
 }
 ```
-- **Validation Rules:** Quantity must be an integer between 1 and 99. Cannot exceed product's `availableStock`.
-- **Response `200 OK`:** Returns full updated cart.
 
----
+Quantity is an integer from 1 to 99. If omitted on add, quantity defaults to 1. Update-item body is `{ "quantity": 2 }`. Delete operations have no request body.
 
-### `PATCH /cart/items/:productId`
-Updates quantity of an existing item in the cart.
+Successful cart mutations return `data.cart`. Cart response uses the current model's names: `items`, `itemCount`, `estimatedSubtotalCents`, `currency`, and `isAuthoritative: false`. Each item includes `quantity`, `unitPriceCents`, `lineTotalCents`, `isAvailableForPurchase`, and `unavailableReason`; its populated `product` includes `name`, `sku`, `slug`, `images`, `priceCents`, `compareAtPriceCents`, `attributes`, and `availableStock`.
 
-- **Request Body:**
-```json
-{
-  "quantity": 3
-}
-```
-- **Response `200 OK`:** Returns full updated cart.
+Cart prices are informational, resolved from live products, and are not authoritative checkout totals. The cart does not reserve or mutate inventory. Product/stock/category changes may make an existing cart item unavailable; display that state and let the customer remove or adjust it.
 
----
+## 7. Customer addresses
 
-### `DELETE /cart/items/:productId`
-Removes a specific product from the customer's cart.
+All address routes require an authenticated customer and operate only on that customer's own address records.
 
-- **Response `200 OK`:** Returns updated cart.
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/addresses` | List addresses; default first, then newest |
+| POST | `/addresses` | Create address |
+| PATCH | `/addresses/:id` | Update an owned address |
+| PATCH | `/addresses/:id/default` | Set an owned address as default |
+| DELETE | `/addresses/:id` | Delete an owned address |
 
----
+Create request fields:
 
-### `DELETE /cart`
-Clears all items from the customer's cart.
-
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Cart cleared successfully"
-}
-```
-
----
-
-## 7. Customer Address Book (Anti-BOLA Protected)
-
-Manages customer shipping and billing addresses. All endpoints enforce strict user ownership filtering (Anti-BOLA) so customers cannot access or manipulate other users' addresses.
-
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-
-### `GET /addresses`
-Lists all addresses belonging to the authenticated customer.
-
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "addresses": [
-      {
-        "_id": "672440015f36e4a2a11ba001",
-        "recipientName": "Alex Vance",
-        "phone": "+15551234567",
-        "streetAddress": "742 Evergreen Terrace",
-        "apartment": "Apt 4B",
-        "city": "Springfield",
-        "state": "OR",
-        "postalCode": "97477",
-        "country": "US",
-        "isDefaultShipping": true,
-        "isDefaultBilling": true
-      }
-    ]
-  }
-}
-```
-
----
-
-### `POST /addresses`
-Creates a new address. If `isDefaultShipping: true` is passed, other customer addresses are atomically updated to `false`.
-
-- **Request Body:**
 ```json
 {
   "recipientName": "Alex Vance",
-  "phone": "+15551234567",
-  "streetAddress": "742 Evergreen Terrace",
-  "apartment": "Apt 4B",
+  "phone": "+1 555-123-4567",
+  "streetAddress1": "742 Evergreen Terrace",
+  "streetAddress2": "Apt 4B",
   "city": "Springfield",
   "state": "OR",
   "postalCode": "97477",
   "country": "US",
-  "isDefaultShipping": true,
-  "isDefaultBilling": true
-}
-```
-- **Response `201 Created`:** Returns created address.
-
----
-
-### `PATCH /addresses/:id`
-Updates an owned address.
-
-- **Response `200 OK`:** Returns updated address.
-
----
-
-### `DELETE /addresses/:id`
-Deletes an owned address. Returns `404 Not Found` if address does not exist or belongs to another user.
-
----
-
-## 8. Checkout Calculations & Order Placement
-
-### `POST /orders/quote`
-Calculates a preview of the checkout total without reserving inventory or creating database records.
-
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-- **Request Body:**
-```json
-{
-  "shippingAddressId": "672440015f36e4a2a11ba001",
-  "items": [
-    {
-      "productId": "672422015f36e4a2a11b8999",
-      "quantity": 2
-    }
-  ]
-}
-```
-*(Note: If `items` is omitted, the quote automatically calculates against customer's active cart).*
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "quote": {
-      "items": [
-        {
-          "productId": "672422015f36e4a2a11b8999",
-          "title": "Heavyweight Boxy Hoodie - Vintage Black (M)",
-          "unitPriceCents": 8500,
-          "quantity": 2,
-          "subtotalCents": 17000
-        }
-      ],
-      "subtotalCents": 17000,
-      "shippingFeeCents": 0,
-      "isFreeShipping": true,
-      "taxCents": 0,
-      "totalCents": 17000,
-      "currency": "USD"
-    }
-  }
+  "isDefault": true
 }
 ```
 
----
+Required fields: `recipientName`, `phone`, `streetAddress1`, `city`, `state`, `postalCode`, and two-letter ISO `country`. `streetAddress2` and `isDefault` are optional. The first address is automatically default. Setting `isDefault: true` or calling the default route switches the customer's default address. Updating uses the same address field names; an update must include at least one allowed field. Delete response contains `deletedAddressId` and `promotedDefaultAddress` when another address is promoted.
 
-### `POST /orders` (Order Creation)
-Places an order, executes atomic MongoDB transactions to reserve inventory, and empties the customer's cart.
+Responses use `data.addresses` for listing and `data.address` for create/update/default operations. Cross-customer access returns 404.
 
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-- **Required Header:** `Idempotency-Key: <UUIDv4>`
-- **Request Body:**
-```json
-{
-  "shippingAddressId": "672440015f36e4a2a11ba001",
-  "billingAddressId": "672440015f36e4a2a11ba001",
-  "paymentMethod": "cod",
-  "customerNote": "Please leave at side door."
-}
-```
-- **Payment Method Constraints:**
-  - `cod`: Always enabled by default. Order immediately transitions to status `confirmed`, `paymentStatus: "pending"`.
-  - `stripe`: Allowed only if `onlineEnabled: true`. Initial status is `awaiting_payment`.
-- **Response `201 Created`:**
-```json
-{
-  "success": true,
-  "message": "Order created successfully",
-  "data": {
-    "order": {
-      "_id": "672450015f36e4a2a11bc001",
-      "orderReference": "ORD-20261101-ABCD",
-      "user": "6724218a5f36e4a2a11b8991",
-      "status": "confirmed",
-      "paymentStatus": "pending",
-      "paymentMethod": "cod",
-      "subtotalCents": 17000,
-      "shippingFeeCents": 0,
-      "taxCents": 0,
-      "totalCents": 17000,
-      "currency": "USD",
-      "items": [
-        {
-          "productId": "672422015f36e4a2a11b8999",
-          "title": "Heavyweight Boxy Hoodie - Vintage Black (M)",
-          "sku": "HWT-HD-VBLK-M",
-          "priceSnapshot": 8500,
-          "quantity": 2,
-          "subtotalCents": 17000
-        }
-      ],
-      "shippingAddress": {
-        "recipientName": "Alex Vance",
-        "streetAddress": "742 Evergreen Terrace",
-        "city": "Springfield",
-        "state": "OR",
-        "postalCode": "97477",
-        "country": "US"
-      },
-      "createdAt": "2026-11-01T01:30:00.000Z"
-    }
-  }
-}
-```
+## 8. Checkout, orders, and payment
 
----
+### Checkout quote
 
-## 9. Customer Order History & Cancellation
+**POST `/orders/quote`**  
+Authentication: customer Bearer token.
 
-### `GET /orders`
-Lists customer's orders with pagination.
-
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-- **Query Parameters:** `page`, `limit`, `status`
-- **Response `200 OK`:** Returns paginated order list.
-
----
-
-### `GET /orders/:orderReference`
-Retrieves order details by reference code (e.g. `ORD-20261101-ABCD`).
-
-- **Response `200 OK`:** Returns order with shipment tracking info (carrier, trackingNumber, trackingUrl) if shipped. Returns `404 Not Found` if order belongs to another customer.
-
----
-
-### `POST /orders/:orderReference/cancel`
-Allows a customer to cancel an unfulfilled order (`confirmed` or `awaiting_payment`). Automatically restocks reserved inventory through an ACID transaction.
-
-- **Authentication:** Required (`Authorization: Bearer <accessToken>`)
-- **Request Body:**
-```json
-{
-  "reason": "Ordered wrong size by mistake"
-}
-```
-- **Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Order cancelled successfully and reserved inventory released"
-}
-```
-
----
-
-## 10. Error Contract & Error Codes
-
-All errors strictly conform to the standardized error envelope:
+Request body:
 
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "INSUFFICIENT_STOCK",
-    "message": "Requested quantity exceeds available stock for SKU HWT-HD-VBLK-M",
-    "details": {
-      "productId": "672422015f36e4a2a11b8999",
-      "availableStock": 1,
-      "requestedQuantity": 2
-    },
-    "timestamp": "2026-11-01T01:30:00.000Z"
-  }
+  "addressId": "672440015f36e4a2a11ba001"
 }
 ```
 
-### Standard Storefront Error Codes
+The quote uses the customer's current cart; clients cannot submit arbitrary line items or prices. Response data contains `shippingAddress`, `items`, `subtotalCents`, `shippingCents`, `taxCents`, `totalCents`, `currency`, `isAuthoritative: false`, and `quotedAt`. Quote does not reserve stock; order placement recalculates everything.
 
-| HTTP Status | Error Code | Scenario |
-| :--- | :--- | :--- |
-| **400** | `VALIDATION_ERROR` | Request payload fails schema validation (e.g. malformed email or negative quantity). |
-| **401** | `UNAUTHORIZED` | In-memory access token expired or missing. Trigger silent refresh. |
-| **401** | `TOKEN_EXPIRED` | Refresh token expired. Redirect user to storefront login. |
-| **403** | `FORBIDDEN_ROLE` | Attempted access with insufficient role permissions. |
-| **404** | `RESOURCE_NOT_FOUND` | Product slug, category, or order reference does not exist or is not owned. |
-| **409** | `CONFLICT` | Email already registered or Idempotency-Key collision with different payload. |
-| **409** | `INSUFFICIENT_STOCK` | Stock was reserved by another buyer prior to order placement. |
-| **409** | `ONLINE_PAYMENTS_DISABLED` | Attempted to select `stripe` when online payments are toggled off. |
-| **422** | `INVALID_ORDER_STATE` | Attempted to cancel an order already in `processing`, `shipped`, or `delivered`. |
-| **429** | `RATE_LIMIT_EXCEEDED` | Request frequency exceeds the IP rate limit. |
+### Place order
+
+**POST `/orders`**  
+Authentication: customer Bearer token. Required header: `Idempotency-Key` (1–128 characters).
+
+Request body:
+
+```json
+{
+  "addressId": "672440015f36e4a2a11ba001",
+  "paymentMethod": "cod"
+}
+```
+
+Only `addressId` and `paymentMethod` are accepted. Supported payment method enum: `cod` or `online`. Extra body fields are rejected. Order contents are sourced from the customer's cart; submitted client prices, totals, stock, and arbitrary items are not accepted.
+
+The backend revalidates live products, active categories, stock, and address ownership; calculates monetary totals in integer minor units; reserves stock transactionally; snapshots order lines and the shipping address; creates the payment record; and clears the cart.
+
+For the current default configuration, COD is enabled and online payments are disabled. COD orders are created with `orderStatus: "confirmed"` and `paymentStatus: "cod_due"`. Online orders begin in `awaiting_payment` only when the backend is configured to permit them. Successful creation returns HTTP 201 with `data` as the order record; an identical idempotent replay returns HTTP 200 with the existing order. A reused key with a different payload returns 409.
+
+Order monetary fields are `subtotalCents`, `shippingCents`, `taxCents`, `totalCents`, and `currency`. Order lines use `product`, `sku`, `name`, `unitPriceCents`, `quantity`, and `lineTotalCents`. Shipping snapshot fields use `recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, and `country`.
+
+### Customer order history
+
+**GET `/orders/my-orders`**  
+Authentication: customer. Query: `page` (default 1), `limit` (default 20, max 100), and optional `orderStatus` from `awaiting_payment`, `confirmed`, `processing`, `shipped`, `delivered`, `cancelled`.
+
+Response: `data.orders` and top-level pagination `meta`.
+
+### Customer order detail
+
+**GET `/orders/my-orders/:reference`**  
+Authentication: customer. The reference must belong to the authenticated customer. Response data contains `order` and `payment`.
+
+### Customer cancellation
+
+**POST `/orders/my-orders/:reference/cancel`**  
+Authentication: customer. Optional body: `{ "reason": "Changed my mind" }` (maximum 500 characters). Customer cancellation is allowed only while the order is `awaiting_payment` or `confirmed`, and never for paid orders. The operation releases reserved stock transactionally and only once. Processing, shipped, delivered, and already-cancelled orders cannot be cancelled through this customer endpoint.
+
+### Order lifecycle
+
+The implemented status values are `awaiting_payment`, `confirmed`, `processing`, `shipped`, `delivered`, and `cancelled`. Admin fulfillment advances eligible orders sequentially through `confirmed -> processing -> shipped -> delivered`. COD payment is collected/confirmed during delivery completion in the admin workflow. Stock is reserved on order placement and converted to a sale on shipment; customer/admin clients must never adjust stock directly as part of an order operation.
+
+### Payment endpoints and V1 capability
+
+**POST `/payments/create-intent`** requires a customer token and body `{ "orderReference": "ORD-..." }`. It is for eligible online orders only.
+
+**POST `/payments/webhook`** is a provider callback endpoint. It requires a valid provider signature in `Stripe-Signature` or `X-Webhook-Signature`; the backend verifies the raw request body and processes event IDs idempotently.
+
+Current default configuration is COD only (`ENABLE_ONLINE_PAYMENTS=false`, `PAYMENT_PROVIDER=cod`). The customer frontend must show COD only unless `GET /config` reports that online payment is enabled and a real provider is configured. Do not simulate successful online payments.
+
+## 9. Money, stock, and image rules
+
+- All money crossing the API boundary is integer minor units, for example USD 19.99 = `1999` cents. Use `priceCents`, `unitPriceCents`, `lineTotalCents`, and the corresponding `*Cents` totals.
+- Currency comes from `GET /config`; current default is USD.
+- Checkout quote is informational. Order placement recalculates authoritative totals.
+- Product stock invariant: `available = physical - reserved`. Public catalog exposes only available stock. Admin inventory endpoints remain the only way to adjust warehouse stock.
+- Product images are HTTPS URL strings. No image-upload API exists in the current implementation.
+- V1 size/colour attributes are descriptive fields on an individual SKU product record, not a product family with variant-selection endpoints.
+
+## 10. Customer-facing endpoint summary
+
+| Method | Full API path | Auth | Request |
+|---|---|---|---|
+| GET | `/api/v1/config` | Public | — |
+| POST | `/api/v1/auth/register` | Public | email, password, firstName, lastName |
+| POST | `/api/v1/auth/customer/login` | Public | email, password |
+| POST | `/api/v1/auth/customer/refresh` | Customer cookie | — |
+| POST | `/api/v1/auth/customer/logout` | Customer cookie | — |
+| GET | `/api/v1/auth/me` | Bearer | — |
+| GET | `/api/v1/categories` | Public | — |
+| GET | `/api/v1/categories/:id` | Public | MongoDB ObjectId |
+| GET | `/api/v1/products` | Public | page, limit, q, category, inStock, sortBy |
+| GET | `/api/v1/products/:idOrSlug` | Public | MongoDB ObjectId or slug |
+| GET/POST/DELETE | `/api/v1/cart` | Customer | See cart methods |
+| POST/PATCH/DELETE | `/api/v1/cart/items` and `/api/v1/cart/items/:productId` | Customer | productId, quantity |
+| GET/POST | `/api/v1/addresses` | Customer | See address fields |
+| PATCH/DELETE | `/api/v1/addresses/:id` | Customer | See address fields |
+| PATCH | `/api/v1/addresses/:id/default` | Customer | — |
+| POST | `/api/v1/orders/quote` | Customer | addressId |
+| POST | `/api/v1/orders` | Customer | Idempotency-Key; addressId, paymentMethod |
+| GET | `/api/v1/orders/my-orders` | Customer | page, limit, orderStatus |
+| GET | `/api/v1/orders/my-orders/:reference` | Customer | Order reference |
+| POST | `/api/v1/orders/my-orders/:reference/cancel` | Customer | Optional reason |
+| POST | `/api/v1/payments/create-intent` | Customer | orderReference; online only |
+| POST | `/api/v1/payments/webhook` | Provider signature | Provider event |
+
+## 11. Explicit V1 limitations
+
+- No parent product / child variant grouping or variant discovery endpoint.
+- No binary product image upload; admin stores HTTPS image URL strings.
+- No public reviews, wishlist, coupon, promotion, or customer support endpoint is defined by the current route set.
+- Online payment is disabled by default. COD is the only enabled V1 method under the default environment.
+- No guest cart or guest checkout; cart, address, and order operations require a logged-in customer.
