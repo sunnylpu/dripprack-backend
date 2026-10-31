@@ -272,7 +272,6 @@ describe('Phase 6: Checkout and Order Management Test Suite', () => {
         description: 'Limited edition',
         category: activeCategory._id,
         priceCents: 2500,
-        attributes: { size: 'L', color: 'White' },
         status: 'published',
         stock: { physical: 2, reserved: 0, available: 2 }
       });
