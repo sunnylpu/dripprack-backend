@@ -41,10 +41,14 @@ export const authController = {
       ipAddress
     });
 
-    // Enforce role authorization if the client context explicitly identifies as admin
-    if (clientType === 'admin' && user.role !== 'admin') {
+    // Application context is not authorization by itself: enforce the account role.
+    // authService.login has already created a refresh session, so revoke it on a mismatch.
+    if (clientType && user.role !== clientType) {
+      await authService.logout({ plainRefreshToken: refreshToken });
       throw ApiError.forbidden(
-        'Access denied: Administrator privileges required for admin portal',
+        clientType === 'admin'
+          ? 'Access denied: Administrator privileges required for admin portal'
+          : 'Access denied: Customer account required for storefront',
         'FORBIDDEN_ROLE'
       );
     }
@@ -108,10 +112,15 @@ export const authController = {
       ipAddress
     });
 
-    // Enforce role consistency with requested client
-    if (clientType === 'admin' && user.role !== 'admin') {
+    // Enforce role consistency before issuing the rotated cookie. Revoke the newly
+    // created token as a defensive cleanup if a legacy cookie is presented in the
+    // wrong application context.
+    if (clientType && user.role !== clientType) {
+      await authService.logout({ plainRefreshToken: newRefreshToken });
       throw ApiError.forbidden(
-        'Access denied: Administrator privileges required for admin session',
+        clientType === 'admin'
+          ? 'Access denied: Administrator privileges required for admin session'
+          : 'Access denied: Customer account required for storefront session',
         'FORBIDDEN_ROLE'
       );
     }
