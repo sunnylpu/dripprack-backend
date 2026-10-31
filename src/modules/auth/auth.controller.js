@@ -38,20 +38,9 @@ export const authController = {
       email,
       password,
       deviceInfo,
-      ipAddress
+      ipAddress,
+      clientType
     });
-
-    // Application context is not authorization by itself: enforce the account role.
-    // authService.login has already created a refresh session, so revoke it on a mismatch.
-    if (clientType && user.role !== clientType) {
-      await authService.logout({ plainRefreshToken: refreshToken });
-      throw ApiError.forbidden(
-        clientType === 'admin'
-          ? 'Access denied: Administrator privileges required for admin portal'
-          : 'Access denied: Customer account required for storefront',
-        'FORBIDDEN_ROLE'
-      );
-    }
 
     const cookieName = getRefreshCookieName(req, user);
 
@@ -109,21 +98,9 @@ export const authController = {
     const { accessToken, refreshToken: newRefreshToken, user } = await authService.refresh({
       plainRefreshToken,
       deviceInfo,
-      ipAddress
+      ipAddress,
+      clientType
     });
-
-    // Enforce role consistency before issuing the rotated cookie. Revoke the newly
-    // created token as a defensive cleanup if a legacy cookie is presented in the
-    // wrong application context.
-    if (clientType && user.role !== clientType) {
-      await authService.logout({ plainRefreshToken: newRefreshToken });
-      throw ApiError.forbidden(
-        clientType === 'admin'
-          ? 'Access denied: Administrator privileges required for admin session'
-          : 'Access denied: Customer account required for storefront session',
-        'FORBIDDEN_ROLE'
-      );
-    }
 
     // Set updated HttpOnly refresh cookie for this application context
     res.cookie(cookieName, newRefreshToken, getRefreshCookieOptions());
