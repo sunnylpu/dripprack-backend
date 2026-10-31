@@ -340,7 +340,7 @@ The backend revalidates live products, active categories, stock, and address own
 
 For the current default configuration, COD is enabled and online payments are disabled. COD orders are created with `orderStatus: "confirmed"` and `paymentStatus: "cod_due"`. Online orders begin in `awaiting_payment` only when the backend is configured to permit them. Successful creation returns HTTP 201 with `data` as the order record; an identical idempotent replay returns HTTP 200 with the existing order. A reused key with a different payload returns 409.
 
-Order monetary fields are `subtotalCents`, `shippingCents`, `taxCents`, `totalCents`, and `currency`. Order lines use `product`, `sku`, `name`, `unitPriceCents`, `quantity`, and `lineTotalCents`. Shipping snapshot fields use `recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, and `country`.
+Order monetary fields are `subtotalCents`, `shippingCents`, `taxCents`, `totalCents`, and `currency`. Order lines use `product`, `sku`, `name`, `attributes` (size/colour snapshot), `unitPriceCents`, `quantity`, and `lineTotalCents`. Checkout quote items and cart product data also carry the structured size/colour attributes. Shipping snapshot fields use `recipientName`, `phone`, `streetAddress1`, `streetAddress2`, `city`, `state`, `postalCode`, and `country`.
 
 ### Customer order history
 
@@ -369,7 +369,7 @@ The implemented status values are `awaiting_payment`, `confirmed`, `processing`,
 
 **POST `/payments/webhook`** is a provider callback endpoint. It requires a valid provider signature in `Stripe-Signature` or `X-Webhook-Signature`; the backend verifies the raw request body and processes event IDs idempotently.
 
-Current default configuration is COD only (`ENABLE_ONLINE_PAYMENTS=false`, `PAYMENT_PROVIDER=cod`). The customer frontend must show COD only unless `GET /config` reports that online payment is enabled and a real provider is configured. Do not simulate successful online payments.
+Current V1 capability is COD only. The Stripe gateway class is a stub and cannot create a real PaymentIntent; therefore the public config endpoint always reports `onlineEnabled: false`, and order placement rejects online payments outside test mode—even if an environment toggle is mistakenly enabled. The customer frontend must show COD only. Do not simulate successful online payments.
 
 ## 9. Money, stock, and image rules
 
@@ -412,5 +412,5 @@ Current default configuration is COD only (`ENABLE_ONLINE_PAYMENTS=false`, `PAYM
 - No parent product / child variant grouping or variant discovery endpoint.
 - No binary product image upload; admin stores HTTPS image URL strings.
 - No public reviews, wishlist, coupon, promotion, or customer support endpoint is defined by the current route set.
-- Online payment is disabled by default. COD is the only enabled V1 method under the default environment.
+- Online payment is not operational in this V1 build because the Stripe adapter is a stub. The public config always reports `onlineEnabled: false`; COD is the only customer checkout method.
 - No guest cart or guest checkout; cart, address, and order operations require a logged-in customer.
