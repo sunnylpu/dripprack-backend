@@ -10,10 +10,13 @@ const envSchema = z.object({
   API_PREFIX: z.string().default('/api/v1'),
 
   // CORS
-  CORS_ORIGIN: z.string().default('http://localhost:3000,http://localhost:5173'),
+  CORS_ORIGIN: z.string().default('http://localhost:3000,http://localhost:5173,http://localhost:5174'),
 
   // Security & Cookies
   COOKIE_SECRET: z.string().min(16, 'COOKIE_SECRET must be at least 16 characters long'),
+  COOKIE_SAME_SITE: z.enum(['strict', 'lax', 'none']).optional(),
+  COOKIE_SECURE: z.string().optional(),
+  COOKIE_DOMAIN: z.string().optional(),
 
   // MongoDB
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
@@ -46,7 +49,18 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
-});
+}).refine(
+  (data) => {
+    if (data.COOKIE_SAME_SITE === 'none') {
+      return data.COOKIE_SECURE === 'true' || data.NODE_ENV === 'production';
+    }
+    return true;
+  },
+  {
+    message: 'COOKIE_SAME_SITE=none requires COOKIE_SECURE=true or NODE_ENV=production',
+    path: ['COOKIE_SAME_SITE']
+  }
+);
 
 const parsedEnv = envSchema.safeParse(process.env);
 

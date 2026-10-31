@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { env } from '../config/env.js';
 import healthRoutes from '../modules/health/health.routes.js';
 import authRoutes from '../modules/auth/auth.routes.js';
 import categoryRoutes from '../modules/categories/category.routes.js';
@@ -22,6 +23,26 @@ router.get('/', (req, res) => {
       docs: '/api/v1/docs',
       status: 'operational',
       timestamp: new Date().toISOString()
+    }
+  });
+});
+
+// Public storefront safe configuration (no secrets exposed)
+router.get('/config', (req, res) => {
+  return ApiResponse.success(res, {
+    message: 'Storefront public configuration retrieved successfully',
+    data: {
+      currency: env.CURRENCY_CODE,
+      shipping: {
+        flatFeeCents: env.SHIPPING_FLAT_FEE_CENTS,
+        freeShippingThresholdCents: env.FREE_SHIPPING_THRESHOLD_CENTS
+      },
+      taxRatePercent: env.TAX_RATE_PERCENT,
+      payments: {
+        codEnabled: true,
+        onlineEnabled: env.ENABLE_ONLINE_PAYMENTS,
+        provider: env.ENABLE_ONLINE_PAYMENTS ? env.PAYMENT_PROVIDER : 'cod'
+      }
     }
   });
 });
