@@ -6,6 +6,7 @@ import { Product } from '../products/product.model.js';
 import { Cart } from '../carts/cart.model.js';
 import { Address } from '../addresses/address.model.js';
 import { InventoryMovement } from '../inventory/inventoryMovement.model.js';
+import { isOnlinePaymentsOperational } from '../payments/payment.gateway.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { env } from '../../config/env.js';
 import { getPaginationParams, formatPaginatedResult } from '../../utils/pagination.js';
@@ -142,9 +143,9 @@ export const orderService = {
    */
   async createOrder(userId, { addressId, paymentMethod }, idempotencyKey) {
     // 1. Check if online payments are allowed
-    if (paymentMethod === 'online' && !env.ENABLE_ONLINE_PAYMENTS && env.NODE_ENV !== 'test') {
+    if (paymentMethod === 'online' && !isOnlinePaymentsOperational() && env.NODE_ENV !== 'test') {
       throw ApiError.badRequest(
-        'Online payment processing is currently disabled or unconfigured',
+        'Online payment processing is not operational in this V1 environment. Please select Cash on Delivery.',
         'ONLINE_PAYMENTS_DISABLED'
       );
     }
