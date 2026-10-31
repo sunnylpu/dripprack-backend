@@ -46,7 +46,7 @@ export const orderController = {
     const { data, meta } = await orderService.getMyOrders(req.user._id, req.query);
     return ApiResponse.success(res, {
       message: 'Customer order history retrieved successfully',
-      data,
+      data: { orders: data },
       meta
     });
   }),
