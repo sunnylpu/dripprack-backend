@@ -5,6 +5,14 @@ const skuRegex = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const httpsUrlRegex = /^https:\/\/[^\s$.?#].[^\s]*$/i;
 
+const productAttributesSchema = z
+  .object({
+    size: z.string().trim().max(50, 'Size cannot exceed 50 characters').nullable().optional(),
+    color: z.string().trim().max(50, 'Color cannot exceed 50 characters').nullable().optional()
+  })
+  .strict('Unexpected product attribute fields are not permitted');
+
+
 const allowedSortFields = [
   'name:asc',
   'name:desc',
@@ -71,6 +79,7 @@ export const createProductSchema = {
         .max(10, 'Cannot exceed 10 images')
         .optional()
         .default([]),
+      attributes: productAttributesSchema.optional(),
       status: z.enum(['draft', 'published', 'archived']).optional().default('draft'),
       lowStockThreshold: z.number().int().min(0).optional().default(5)
     })
@@ -141,6 +150,7 @@ export const updateProductSchema = {
         .array(z.string().regex(httpsUrlRegex, 'Image URL must be a valid secure HTTPS link'))
         .max(10, 'Cannot exceed 10 images')
         .optional(),
+      attributes: productAttributesSchema.optional(),
       lowStockThreshold: z.number().int().min(0).optional()
     })
     .strip()
