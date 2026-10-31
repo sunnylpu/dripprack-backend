@@ -146,6 +146,22 @@ describe('Admin & Customer Session Isolation and Multi-Cookie Architecture', () 
     expect(extractCookie(res, ADMIN_REFRESH_COOKIE_NAME)).toBeNull();
   });
 
+  it('should reject an administrator attempting customer login without leaving an active session', async () => {
+    await seedAccounts();
+
+    const res = await request(app)
+      .post('/api/v1/auth/customer/login')
+      .send({
+        email: adminCredentials.email,
+        password: adminCredentials.password
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FORBIDDEN_ROLE');
+    expect(await AuthSession.countDocuments({ isRevoked: false })).toBe(0);
+    expect(extractCookie(res, CUSTOMER_REFRESH_COOKIE_NAME)).toBeNull();
+  });
+
   it('should support dedicated aliases /auth/admin/login and /auth/customer/login', async () => {
     await seedAccounts();
 
