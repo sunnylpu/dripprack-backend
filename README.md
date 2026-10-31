@@ -74,7 +74,7 @@ backend/
 
 The implemented customer API contract, request/response examples, customer session rules, product SKU model, cart/address/checkout/order flows, and explicit V1 limitations are documented in [docs/storefront-api-contract.md](docs/storefront-api-contract.md). Keep that document aligned with route validators, controllers, services, and models whenever an API changes.
 
-${link}
+## 3. Quick Start & Setup
 
 ### Prerequisites
 - Node.js >= 20.0.0
