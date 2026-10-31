@@ -43,7 +43,7 @@ export const authService = {
   /**
    * Authenticate user credentials and create a new session
    */
-  async login({ email, password, deviceInfo, ipAddress }) {
+  async login({ email, password, deviceInfo, ipAddress, clientType }) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Explicitly query passwordHash which is select: false by default
@@ -64,6 +64,20 @@ export const authService = {
     const isPasswordValid = await user.comparePassword(password);
     if (!isPasswordValid) {
       throw ApiError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+    }
+
+    // Strict role check enforced BEFORE any session is created in the database
+    if (clientType === 'admin' && user.role !== 'admin') {
+      throw ApiError.forbidden(
+        'Access denied: Administrator privileges required for admin portal',
+        'FORBIDDEN_ROLE'
+      );
+    }
+    if (clientType === 'customer' && user.role !== 'customer') {
+      throw ApiError.forbidden(
+        'Access denied: Storefront is reserved for customer accounts only',
+        'FORBIDDEN_ROLE'
+      );
     }
 
     // Generate tokens
@@ -92,7 +106,7 @@ export const authService = {
    * Rotate refresh token and issue a fresh access token
    * Detects reuse of invalidated tokens to prevent session hijacking
    */
-  async refresh({ plainRefreshToken, deviceInfo, ipAddress }) {
+  async refresh({ plainRefreshToken, deviceInfo, ipAddress, clientType }) {
     if (!plainRefreshToken) {
       throw ApiError.unauthorized('Refresh token is required', 'MISSING_REFRESH_TOKEN');
     }
@@ -131,6 +145,24 @@ export const authService = {
       session.isRevoked = true;
       await session.save();
       throw ApiError.unauthorized('User account is suspended, deactivated, or not found', 'ACCOUNT_INACTIVE');
+    }
+
+    // Role enforcement on session refresh
+    if (clientType === 'admin' && user.role !== 'admin') {
+      session.isRevoked = true;
+      await session.save();
+      throw ApiError.forbidden(
+        'Access denied: Administrator privileges required for admin session',
+        'FORBIDDEN_ROLE'
+      );
+    }
+    if (clientType === 'customer' && user.role !== 'customer') {
+      session.isRevoked = true;
+      await session.save();
+      throw ApiError.forbidden(
+        'Access denied: Storefront is reserved for customer accounts only',
+        'FORBIDDEN_ROLE'
+      );
     }
 
     // Invalidate current session (Rotation)
