@@ -129,7 +129,7 @@ describe('Admin & Customer Session Isolation and Multi-Cookie Architecture', () 
     expect(adminCookie).toBeNull();
   });
 
-  it('should reject non-admin account attempting to log in with X-App-Client: admin', async () => {
+  it('should reject non-admin account attempting to log in with X-App-Client: admin and create NO session', async () => {
     await seedAccounts();
 
     const res = await request(app)
@@ -144,6 +144,31 @@ describe('Admin & Customer Session Isolation and Multi-Cookie Architecture', () 
     expect(res.body.success).toBe(false);
     expect(res.body.error.code).toBe('FORBIDDEN_ROLE');
     expect(extractCookie(res, ADMIN_REFRESH_COOKIE_NAME)).toBeNull();
+
+    // Verify ZERO orphaned sessions were created in the database
+    const sessionCount = await AuthSession.countDocuments({});
+    expect(sessionCount).toBe(0);
+  });
+
+  it('should reject admin account attempting to log in with X-App-Client: customer and create NO session', async () => {
+    await seedAccounts();
+
+    const res = await request(app)
+      .post('/api/v1/auth/login')
+      .set('X-App-Client', 'customer')
+      .send({
+        email: adminCredentials.email,
+        password: adminCredentials.password
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('FORBIDDEN_ROLE');
+    expect(extractCookie(res, CUSTOMER_REFRESH_COOKIE_NAME)).toBeNull();
+
+    // Verify ZERO orphaned sessions were created in the database
+    const sessionCount = await AuthSession.countDocuments({});
+    expect(sessionCount).toBe(0);
   });
 
   it('should support dedicated aliases /auth/admin/login and /auth/customer/login', async () => {

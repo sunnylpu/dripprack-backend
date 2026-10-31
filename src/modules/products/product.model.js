@@ -53,6 +53,20 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    attributes: {
+      size: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: [50, 'Size cannot exceed 50 characters']
+      },
+      color: {
+        type: String,
+        trim: true,
+        default: null,
+        maxlength: [50, 'Color cannot exceed 50 characters']
+      }
+    },
     status: {
       type: String,
       enum: {
@@ -137,5 +151,6 @@ productSchema.index({ status: 1, category: 1, 'stock.available': 1 });
 productSchema.index({ 'stock.available': 1 });
 productSchema.index({ category: 1 });
 productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ 'attributes.size': 1, 'attributes.color': 1 });
 
 export const Product = mongoose.model('Product', productSchema);

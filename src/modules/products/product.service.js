@@ -213,6 +213,10 @@ export const productService = {
       priceCents: data.priceCents,
       compareAtPriceCents: data.compareAtPriceCents ?? null,
       images: Array.isArray(data.images) ? data.images : [],
+      attributes: {
+        size: data.attributes?.size ? data.attributes.size.trim() : null,
+        color: data.attributes?.color ? data.attributes.color.trim() : null
+      },
       status: data.status || 'draft',
       stock: {
         physical: 0,
@@ -282,6 +286,12 @@ export const productService = {
     if (updateData.priceCents !== undefined) product.priceCents = updateData.priceCents;
     if (updateData.compareAtPriceCents !== undefined) product.compareAtPriceCents = updateData.compareAtPriceCents;
     if (updateData.images !== undefined) product.images = updateData.images;
+    if (updateData.attributes !== undefined) {
+      product.attributes = {
+        size: updateData.attributes?.size ? updateData.attributes.size.trim() : null,
+        color: updateData.attributes?.color ? updateData.attributes.color.trim() : null
+      };
+    }
     if (updateData.lowStockThreshold !== undefined) product.lowStockThreshold = updateData.lowStockThreshold;
 
     // Notice: Any updateData.stock fields are deliberately NOT assigned!

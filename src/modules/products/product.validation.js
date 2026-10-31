@@ -71,6 +71,13 @@ export const createProductSchema = {
         .max(10, 'Cannot exceed 10 images')
         .optional()
         .default([]),
+      attributes: z
+        .object({
+          size: z.string().trim().max(50).nullable().optional(),
+          color: z.string().trim().max(50).nullable().optional()
+        })
+        .optional()
+        .default({ size: null, color: null }),
       status: z.enum(['draft', 'published', 'archived']).optional().default('draft'),
       lowStockThreshold: z.number().int().min(0).optional().default(5)
     })
@@ -140,6 +147,12 @@ export const updateProductSchema = {
       images: z
         .array(z.string().regex(httpsUrlRegex, 'Image URL must be a valid secure HTTPS link'))
         .max(10, 'Cannot exceed 10 images')
+        .optional(),
+      attributes: z
+        .object({
+          size: z.string().trim().max(50).nullable().optional(),
+          color: z.string().trim().max(50).nullable().optional()
+        })
         .optional(),
       lowStockThreshold: z.number().int().min(0).optional()
     })

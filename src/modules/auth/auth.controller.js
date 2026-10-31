@@ -38,16 +38,9 @@ export const authController = {
       email,
       password,
       deviceInfo,
-      ipAddress
+      ipAddress,
+      clientType
     });
-
-    // Enforce role authorization if the client context explicitly identifies as admin
-    if (clientType === 'admin' && user.role !== 'admin') {
-      throw ApiError.forbidden(
-        'Access denied: Administrator privileges required for admin portal',
-        'FORBIDDEN_ROLE'
-      );
-    }
 
     const cookieName = getRefreshCookieName(req, user);
 
@@ -105,16 +98,9 @@ export const authController = {
     const { accessToken, refreshToken: newRefreshToken, user } = await authService.refresh({
       plainRefreshToken,
       deviceInfo,
-      ipAddress
+      ipAddress,
+      clientType
     });
-
-    // Enforce role consistency with requested client
-    if (clientType === 'admin' && user.role !== 'admin') {
-      throw ApiError.forbidden(
-        'Access denied: Administrator privileges required for admin session',
-        'FORBIDDEN_ROLE'
-      );
-    }
 
     // Set updated HttpOnly refresh cookie for this application context
     res.cookie(cookieName, newRefreshToken, getRefreshCookieOptions());
