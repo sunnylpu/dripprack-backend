@@ -69,6 +69,11 @@ export class ApiError extends Error {
     return new ApiError(500, message, code, det);
   }
 
+  static badGateway(message = 'Bad Gateway', codeOrDetails = 'BAD_GATEWAY', details = null) {
+    const { code, det } = ApiError._resolveCodeAndDetails('BAD_GATEWAY', codeOrDetails, details);
+    return new ApiError(502, message, code, det);
+  }
+
   static _resolveCodeAndDetails(defaultCode, codeOrDetails, details) {
     if (typeof codeOrDetails === 'string') {
       return { code: codeOrDetails, det: details || null };

@@ -300,7 +300,7 @@ describe('Admin & Customer Session Isolation and Multi-Cookie Architecture', () 
     expect(res.body.data.shipping.flatFeeCents).toBe(env.SHIPPING_FLAT_FEE_CENTS);
     expect(res.body.data.shipping.freeShippingThresholdCents).toBe(env.FREE_SHIPPING_THRESHOLD_CENTS);
     expect(res.body.data.payments.codEnabled).toBe(true);
-    expect(res.body.data.payments.onlineEnabled).toBe(false);
-    expect(res.body.data.payments.provider).toBe('cod');
+    expect(res.body.data.payments.onlineEnabled).toBe(env.ENABLE_ONLINE_PAYMENTS);
+    expect(res.body.data.payments.provider).toBe(env.PAYMENT_PROVIDER);
   });
 });

@@ -18,7 +18,7 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Payment provider is required'],
       enum: {
-        values: ['cod', 'stripe', 'mock'],
+        values: ['cod', 'stripe', 'dodo', 'mock'],
         message: '{VALUE} is not a valid payment provider'
       },
       default: 'cod'

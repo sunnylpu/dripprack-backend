@@ -88,7 +88,10 @@ export const productService = {
     const product = await Product.findOne({
       ...lookup,
       status: 'published'
-    }).populate('category', 'name slug isActive');
+    })
+      .populate('category', 'name slug isActive')
+      .populate('styledWith', 'sku slug name priceCents compareAtPriceCents images secondaryHoverImage attributes badge subtitle stock.available')
+      .populate('relatedProducts', 'sku slug name priceCents compareAtPriceCents images secondaryHoverImage attributes badge subtitle stock.available');
 
     // Must be found, published, and category must exist and be active
     if (!product || !product.category || !product.category.isActive) {

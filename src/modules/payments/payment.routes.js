@@ -10,9 +10,9 @@ import {
 
 const router = Router();
 
-// Customer intent creation (authenticated customer)
+// Customer intent creation (authenticated customer) - supports both /create-intent and /intent
 router.post(
-  '/create-intent',
+  ['/create-intent', '/intent'],
   authenticate,
   authorize('customer'),
   validateRequest(createPaymentIntentSchema),

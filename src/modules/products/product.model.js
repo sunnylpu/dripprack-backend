@@ -53,6 +53,64 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: []
     },
+    subtitle: {
+      type: String,
+      trim: true,
+      default: null,
+      maxlength: [100, 'Subtitle cannot exceed 100 characters']
+    },
+    badge: {
+      type: String,
+      enum: {
+        values: ['BESTSELLER', 'NEW_ARRIVAL', 'JUST_RESTOCKED', 'LIMITED_EDITION', 'ARCHIVE', null],
+        message: '{VALUE} is not a valid badge'
+      },
+      default: null
+    },
+    secondaryHoverImage: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    videoUrl: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    modelSpecs: {
+      type: [String],
+      default: []
+    },
+    measurementTable: {
+      columns: {
+        type: [String],
+        default: []
+      },
+      rows: {
+        type: [[String]],
+        default: []
+      }
+    },
+    details: {
+      temperatureRating: { type: String, default: null, trim: true },
+      insulation: { type: String, default: null, trim: true },
+      composition: { type: String, default: null, trim: true },
+      careInstructions: { type: String, default: null, trim: true },
+      origin: { type: String, default: null, trim: true },
+      features: { type: [String], default: [] }
+    },
+    styledWith: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+      }
+    ],
+    relatedProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+      }
+    ],
     attributes: {
       size: {
         type: String,

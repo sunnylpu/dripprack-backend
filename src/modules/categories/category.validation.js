@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const httpsUrlRegex = /^https:\/\/[^\s$.?#].[^\s]*$/i;
 
 export const categoryParamsSchema = {
   params: z.object({
@@ -29,6 +30,9 @@ export const createCategorySchema = {
         .trim()
         .max(500, 'Description cannot exceed 500 characters')
         .optional(),
+      bannerImageUrl: z.string().regex(httpsUrlRegex, 'Banner image URL must be a valid HTTPS link').nullable().optional(),
+      bannerVideoUrl: z.string().regex(httpsUrlRegex, 'Banner video URL must be a valid HTTPS link').nullable().optional(),
+      featuredProducts: z.array(z.string().regex(objectIdRegex, 'Invalid product ID')).optional(),
       isActive: z.boolean().optional().default(true)
     })
     .strip()
@@ -58,6 +62,9 @@ export const updateCategorySchema = {
         .trim()
         .max(500, 'Description cannot exceed 500 characters')
         .optional(),
+      bannerImageUrl: z.string().regex(httpsUrlRegex, 'Banner image URL must be a valid HTTPS link').nullable().optional(),
+      bannerVideoUrl: z.string().regex(httpsUrlRegex, 'Banner video URL must be a valid HTTPS link').nullable().optional(),
+      featuredProducts: z.array(z.string().regex(objectIdRegex, 'Invalid product ID')).optional(),
       isActive: z.boolean().optional()
     })
     .strip()

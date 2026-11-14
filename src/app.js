@@ -30,8 +30,8 @@ const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps, curl, postman) in non-production
-      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
+      // Allow requests with no origin, wildcard, explicit allowlist, or non-production
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
         return callback(null, true);
       }
       return callback(new Error(`CORS policy violation: origin ${origin} is not allowed`));

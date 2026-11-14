@@ -48,7 +48,7 @@ export const categoryService = {
   /**
    * Create a new category (Admin only)
    */
-  async createCategory({ name, slug, description, isActive }) {
+  async createCategory({ name, slug, description, bannerImageUrl, bannerVideoUrl, featuredProducts, isActive }) {
     const trimmedName = name.trim();
     const finalSlug = slug ? slug.trim().toLowerCase() : slugify(trimmedName);
 
@@ -75,6 +75,9 @@ export const categoryService = {
       name: trimmedName,
       slug: finalSlug,
       description: description?.trim() || '',
+      bannerImageUrl: bannerImageUrl || null,
+      bannerVideoUrl: bannerVideoUrl || null,
+      featuredProducts: featuredProducts || [],
       isActive: typeof isActive === 'boolean' ? isActive : true
     });
 
@@ -120,6 +123,9 @@ export const categoryService = {
     if (updateData.name !== undefined) category.name = updateData.name;
     if (updateData.slug !== undefined) category.slug = updateData.slug;
     if (updateData.description !== undefined) category.description = updateData.description.trim();
+    if (updateData.bannerImageUrl !== undefined) category.bannerImageUrl = updateData.bannerImageUrl;
+    if (updateData.bannerVideoUrl !== undefined) category.bannerVideoUrl = updateData.bannerVideoUrl;
+    if (updateData.featuredProducts !== undefined) category.featuredProducts = updateData.featuredProducts;
     if (updateData.isActive !== undefined) category.isActive = updateData.isActive;
 
     await category.save();

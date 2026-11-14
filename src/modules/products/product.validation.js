@@ -71,6 +71,42 @@ export const createProductSchema = {
         .max(10, 'Cannot exceed 10 images')
         .optional()
         .default([]),
+      subtitle: z.string().trim().max(100).nullable().optional(),
+      badge: z
+        .enum(['BESTSELLER', 'NEW_ARRIVAL', 'JUST_RESTOCKED', 'LIMITED_EDITION', 'ARCHIVE'])
+        .nullable()
+        .optional(),
+      secondaryHoverImage: z
+        .string()
+        .regex(httpsUrlRegex, 'Secondary hover image URL must be a valid secure HTTPS link')
+        .nullable()
+        .optional(),
+      videoUrl: z
+        .string()
+        .regex(httpsUrlRegex, 'Video URL must be a valid secure HTTPS link')
+        .nullable()
+        .optional(),
+      modelSpecs: z.array(z.string().trim().max(200)).max(10).optional().default([]),
+      measurementTable: z
+        .object({
+          columns: z.array(z.string().trim()),
+          rows: z.array(z.array(z.string().trim()))
+        })
+        .nullable()
+        .optional(),
+      details: z
+        .object({
+          temperatureRating: z.string().trim().nullable().optional(),
+          insulation: z.string().trim().nullable().optional(),
+          composition: z.string().trim().nullable().optional(),
+          careInstructions: z.string().trim().nullable().optional(),
+          origin: z.string().trim().nullable().optional(),
+          features: z.array(z.string().trim()).optional()
+        })
+        .nullable()
+        .optional(),
+      styledWith: z.array(z.string().regex(objectIdRegex)).optional().default([]),
+      relatedProducts: z.array(z.string().regex(objectIdRegex)).optional().default([]),
       attributes: z
         .object({
           size: z.string().trim().max(50).nullable().optional(),
@@ -148,6 +184,42 @@ export const updateProductSchema = {
         .array(z.string().regex(httpsUrlRegex, 'Image URL must be a valid secure HTTPS link'))
         .max(10, 'Cannot exceed 10 images')
         .optional(),
+      subtitle: z.string().trim().max(100).nullable().optional(),
+      badge: z
+        .enum(['BESTSELLER', 'NEW_ARRIVAL', 'JUST_RESTOCKED', 'LIMITED_EDITION', 'ARCHIVE'])
+        .nullable()
+        .optional(),
+      secondaryHoverImage: z
+        .string()
+        .regex(httpsUrlRegex, 'Secondary hover image URL must be a valid secure HTTPS link')
+        .nullable()
+        .optional(),
+      videoUrl: z
+        .string()
+        .regex(httpsUrlRegex, 'Video URL must be a valid secure HTTPS link')
+        .nullable()
+        .optional(),
+      modelSpecs: z.array(z.string().trim().max(200)).max(10).optional(),
+      measurementTable: z
+        .object({
+          columns: z.array(z.string().trim()),
+          rows: z.array(z.array(z.string().trim()))
+        })
+        .nullable()
+        .optional(),
+      details: z
+        .object({
+          temperatureRating: z.string().trim().nullable().optional(),
+          insulation: z.string().trim().nullable().optional(),
+          composition: z.string().trim().nullable().optional(),
+          careInstructions: z.string().trim().nullable().optional(),
+          origin: z.string().trim().nullable().optional(),
+          features: z.array(z.string().trim()).optional()
+        })
+        .nullable()
+        .optional(),
+      styledWith: z.array(z.string().regex(objectIdRegex)).optional(),
+      relatedProducts: z.array(z.string().regex(objectIdRegex)).optional(),
       attributes: z
         .object({
           size: z.string().trim().max(50).nullable().optional(),

@@ -28,7 +28,7 @@ export const globalLimiter = rateLimit({
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: env.RATE_LIMIT_AUTH_MAX_REQUESTS,
+  max: (req) => (req?.headers?.['x-test-rate-limit'] ? 5 : env.RATE_LIMIT_AUTH_MAX_REQUESTS),
   standardHeaders: true,
   legacyHeaders: false,
   handler: createRateLimitHandler('Too many authentication attempts. Please try again after 15 minutes.'),

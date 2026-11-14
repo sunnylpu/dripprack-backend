@@ -16,7 +16,7 @@ export const paymentService = {
     const order = await Order.findOne({
       orderReference,
       customer: userId
-    });
+    }).populate('customer');
 
     if (!order) {
       throw ApiError.notFound('Order not found', 'ORDER_NOT_FOUND');
@@ -58,6 +58,7 @@ export const paymentService = {
       orderReference: order.orderReference,
       providerPaymentId: intent.providerPaymentId,
       clientSecret: intent.clientSecret,
+      checkoutUrl: intent.checkoutUrl || null,
       amountCents: payment.amountCents,
       currency: payment.currency,
       provider: payment.provider,

@@ -24,6 +24,14 @@ function generateOrderReference() {
   return `ORD-${dateStr}-${randStr}`;
 }
 
+function isReplicaSetSupported() {
+  return Boolean(
+    mongoose.connection?.client?.topology?.description?.setName ||
+    mongoose.connection?.client?.topology?.description?.type === 'ReplicaSetWithPrimary' ||
+    mongoose.connection?.client?.topology?.description?.type === 'Sharded'
+  );
+}
+
 /**
  * Calculate server-authoritative monetary amounts in integer minor currency units
  */
@@ -170,106 +178,106 @@ export const orderService = {
       }
     }
 
-    // 4. Multi-document transaction for atomic order creation
-    const session = await mongoose.startSession();
+    // 4. Multi-document transaction for atomic order creation (with standalone fallback)
+    const supportsTransactions = isReplicaSetSupported();
+    const session = supportsTransactions ? await mongoose.startSession() : null;
     let order;
 
-    try {
-      await session.withTransaction(async () => {
-        // 4a. Load and verify shipping address within transaction
-        const address = await Address.findOne({ _id: addressId, user: userId }).session(session);
-        if (!address) {
-          throw ApiError.notFound(
-            'Delivery address not found or does not belong to customer',
-            'ADDRESS_NOT_FOUND'
+    const executeCreateOrder = async (currentSession) => {
+      // 4a. Load and verify shipping address within transaction
+      const address = await Address.findOne({ _id: addressId, user: userId }).session(currentSession);
+      if (!address) {
+        throw ApiError.notFound(
+          'Delivery address not found or does not belong to customer',
+          'ADDRESS_NOT_FOUND'
+        );
+      }
+
+      // 4b. Load customer cart within transaction
+      const cart = await Cart.findOne({ user: userId }).session(currentSession);
+      if (!cart || !cart.items || cart.items.length === 0) {
+        throw ApiError.badRequest('Shopping cart is empty', 'CART_EMPTY');
+      }
+
+      let subtotalCents = 0;
+      const orderItems = [];
+      const stockReservationSnapshots = [];
+
+      // 4c. Process and atomically reserve each product line
+      for (const item of cart.items) {
+        const product = await Product.findById(item.product).populate('category').session(currentSession);
+
+        if (!product) {
+          throw ApiError.badRequest(
+            'One or more products no longer exist in the catalog',
+            'PRODUCT_UNAVAILABLE'
           );
         }
 
-        // 4b. Load customer cart within transaction
-        const cart = await Cart.findOne({ user: userId }).session(session);
-        if (!cart || !cart.items || cart.items.length === 0) {
-          throw ApiError.badRequest('Shopping cart is empty', 'CART_EMPTY');
+        if (product.status !== 'published') {
+          throw ApiError.badRequest(
+            `Product "${product.name}" is not published`,
+            'PRODUCT_UNAVAILABLE'
+          );
         }
 
-        let subtotalCents = 0;
-        const orderItems = [];
-        const stockReservationSnapshots = [];
+        if (!product.category || !product.category.isActive) {
+          throw ApiError.badRequest(
+            `Product "${product.name}" belongs to an inactive category`,
+            'CATEGORY_INACTIVE'
+          );
+        }
 
-        // 4c. Process and atomically reserve each product line
-        for (const item of cart.items) {
-          const product = await Product.findById(item.product).populate('category').session(session);
-
-          if (!product) {
-            throw ApiError.badRequest(
-              'One or more products no longer exist in the catalog',
-              'PRODUCT_UNAVAILABLE'
-            );
-          }
-
-          if (product.status !== 'published') {
-            throw ApiError.badRequest(
-              `Product "${product.name}" is not published`,
-              'PRODUCT_UNAVAILABLE'
-            );
-          }
-
-          if (!product.category || !product.category.isActive) {
-            throw ApiError.badRequest(
-              `Product "${product.name}" belongs to an inactive category`,
-              'CATEGORY_INACTIVE'
-            );
-          }
-
-          // Atomic conditional stock reservation
-          const updatedProduct = await Product.findOneAndUpdate(
-            {
-              _id: item.product,
-              status: 'published',
-              'stock.available': { $gte: item.quantity }
-            },
-            {
-              $inc: {
-                'stock.reserved': item.quantity,
-                'stock.available': -item.quantity
-              }
-            },
-            {
-              new: true,
-              session
+        // Atomic conditional stock reservation
+        const updatedProduct = await Product.findOneAndUpdate(
+          {
+            _id: item.product,
+            status: 'published',
+            'stock.available': { $gte: item.quantity }
+          },
+          {
+            $inc: {
+              'stock.reserved': item.quantity,
+              'stock.available': -item.quantity
             }
-          );
-
-          if (!updatedProduct) {
-            throw ApiError.conflict(
-              `Insufficient available stock for product "${product.name}"`,
-              'INSUFFICIENT_STOCK'
-            );
+          },
+          {
+            new: true,
+            session: currentSession || undefined
           }
+        );
 
-          const unitPriceCents = product.priceCents;
-          const lineTotalCents = unitPriceCents * item.quantity;
-          subtotalCents += lineTotalCents;
+        if (!updatedProduct) {
+          throw ApiError.conflict(
+            `Insufficient available stock for product "${product.name}"`,
+            'INSUFFICIENT_STOCK'
+          );
+        }
 
-          orderItems.push({
-            product: product._id,
-            sku: product.sku,
-            name: product.name,
-            unitPriceCents,
-            quantity: item.quantity,
-            lineTotalCents
-          });
+        const unitPriceCents = product.priceCents;
+        const lineTotalCents = unitPriceCents * item.quantity;
+        subtotalCents += lineTotalCents;
 
-          stockReservationSnapshots.push({
-            product: product._id,
-            sku: product.sku,
-            quantity: item.quantity,
-            previousPhysical: product.stock.physical,
-            newPhysical: updatedProduct.stock.physical,
-            previousAvailable: product.stock.available,
-            newAvailable: updatedProduct.stock.available,
-            previousReserved: product.stock.reserved,
-            newReserved: updatedProduct.stock.reserved
-          });
+        orderItems.push({
+          product: product._id,
+          sku: product.sku,
+          name: product.name,
+          unitPriceCents,
+          quantity: item.quantity,
+          lineTotalCents
+        });
+
+        stockReservationSnapshots.push({
+          product: product._id,
+          sku: product.sku,
+          quantity: item.quantity,
+          previousPhysical: product.stock.physical,
+          newPhysical: updatedProduct.stock.physical,
+          previousAvailable: product.stock.available,
+          newAvailable: updatedProduct.stock.available,
+          previousReserved: product.stock.reserved,
+          newReserved: updatedProduct.stock.reserved
+        });
         }
 
         // 4d. Calculate authoritative totals
@@ -280,7 +288,7 @@ export const orderService = {
         let isUnique = false;
         for (let attempt = 0; attempt < 5; attempt++) {
           orderReference = generateOrderReference();
-          const existing = await Order.findOne({ orderReference }).session(session);
+          const existing = await Order.findOne({ orderReference }).session(currentSession);
           if (!existing) {
             isUnique = true;
             break;
@@ -331,7 +339,7 @@ export const orderService = {
               isStockRestocked: false
             }
           ],
-          { session }
+          currentSession ? { session: currentSession } : {}
         );
         order = orderDocs[0];
 
@@ -341,7 +349,7 @@ export const orderService = {
             ? 'cod'
             : env.PAYMENT_PROVIDER === 'mock' || env.NODE_ENV === 'test'
               ? 'mock'
-              : 'stripe';
+              : env.PAYMENT_PROVIDER || 'dodo';
 
         await Payment.create(
           [
@@ -355,7 +363,7 @@ export const orderService = {
               processedEvents: []
             }
           ],
-          { session }
+          currentSession ? { session: currentSession } : {}
         );
 
         // 4j. Persist InventoryMovement audit records for each reservation
@@ -375,15 +383,24 @@ export const orderService = {
           orderReference: order.orderReference,
           reason: `Order placement stock reservation for ${order.orderReference}`
         }));
-        await InventoryMovement.create(movements, { session });
+        await InventoryMovement.create(movements, currentSession ? { session: currentSession } : {});
 
         // 4k. Clear customer cart
         await Cart.findOneAndUpdate(
           { user: userId },
           { $set: { items: [] } },
-          { session }
+          currentSession ? { session: currentSession } : {}
         );
-      });
+    };
+
+    try {
+      if (session) {
+        await session.withTransaction(async () => {
+          await executeCreateOrder(session);
+        });
+      } else {
+        await executeCreateOrder(null);
+      }
 
       return { order, isIdempotentReplay: false };
     } catch (error) {
@@ -416,7 +433,9 @@ export const orderService = {
 
       throw error;
     } finally {
-      session.endSession();
+      if (session) {
+        session.endSession();
+      }
     }
   },
 
@@ -494,99 +513,108 @@ export const orderService = {
       );
     }
 
-    // 4. Execute cancellation and inventory release inside transaction
-    const session = await mongoose.startSession();
+    // 4. Execute cancellation and inventory release
+    const supportsTransactions = isReplicaSetSupported();
+    const session = supportsTransactions ? await mongoose.startSession() : null;
     let updatedOrder;
 
-    try {
-      await session.withTransaction(async () => {
-        // Atomic status transition requiring order to still be in cancellable state
-        updatedOrder = await Order.findOneAndUpdate(
-          {
-            _id: order._id,
-            customer: userId,
-            orderStatus: { $in: ['awaiting_payment', 'confirmed'] },
-            isStockRestocked: false
-          },
-          {
-            $set: {
-              orderStatus: 'cancelled',
-              paymentStatus: 'failed',
-              isStockRestocked: true,
-              cancellation: {
-                cancelledAt: new Date(),
-                cancelledBy: userId,
-                reason: reason || 'Customer requested cancellation'
-              }
-            }
-          },
-          { new: true, session }
-        );
-
-        if (!updatedOrder) {
-          throw ApiError.conflict(
-            'Order was concurrently modified or already cancelled',
-            'ORDER_ALREADY_CANCELLED'
-          );
-        }
-
-        // Release reserved stock for each item
-        for (const item of updatedOrder.items) {
-          const productBefore = await Product.findById(item.product).session(session);
-
-          if (productBefore) {
-            const productAfter = await Product.findOneAndUpdate(
-              {
-                _id: item.product,
-                'stock.reserved': { $gte: item.quantity }
-              },
-              {
-                $inc: {
-                  'stock.reserved': -item.quantity,
-                  'stock.available': item.quantity
-                }
-              },
-              { new: true, session }
-            );
-
-            if (productAfter) {
-              await InventoryMovement.create(
-                [
-                  {
-                    product: item.product,
-                    sku: item.sku,
-                    movementType: 'release',
-                    quantityDelta: item.quantity,
-                    previousPhysical: productBefore.stock.physical,
-                    newPhysical: productAfter.stock.physical,
-                    previousAvailable: productBefore.stock.available,
-                    newAvailable: productAfter.stock.available,
-                    previousReserved: productBefore.stock.reserved,
-                    newReserved: productAfter.stock.reserved,
-                    actor: userId,
-                    actorRole: 'customer',
-                    orderReference: updatedOrder.orderReference,
-                    reason: `Stock release on customer order cancellation: ${updatedOrder.orderReference}`
-                  }
-                ],
-                { session }
-              );
+    const executeCancel = async (currentSession) => {
+      // Atomic status transition requiring order to still be in cancellable state
+      updatedOrder = await Order.findOneAndUpdate(
+        {
+          _id: order._id,
+          customer: userId,
+          orderStatus: { $in: ['awaiting_payment', 'confirmed'] },
+          isStockRestocked: false
+        },
+        {
+          $set: {
+            orderStatus: 'cancelled',
+            paymentStatus: 'failed',
+            isStockRestocked: true,
+            cancellation: {
+              cancelledAt: new Date(),
+              cancelledBy: userId,
+              reason: reason || 'Customer requested cancellation'
             }
           }
-        }
+        },
+        { new: true, session: currentSession || undefined }
+      );
 
-        // Transition Payment status to failed
-        await Payment.findOneAndUpdate(
-          { order: updatedOrder._id },
-          {
-            $set: {
-              status: 'failed',
-              failureReason: 'Order cancelled by customer'
-            }
-          },
-          { session }
+      if (!updatedOrder) {
+        throw ApiError.conflict(
+          'Order was concurrently modified or already cancelled',
+          'ORDER_ALREADY_CANCELLED'
         );
-      });
+      }
+
+      // Release reserved stock for each item
+      for (const item of updatedOrder.items) {
+        const productBefore = await Product.findById(item.product).session(currentSession);
+
+        if (productBefore) {
+          const productAfter = await Product.findOneAndUpdate(
+            {
+              _id: item.product,
+              'stock.reserved': { $gte: item.quantity }
+            },
+            {
+              $inc: {
+                'stock.reserved': -item.quantity,
+                'stock.available': item.quantity
+              }
+            },
+            { new: true, session: currentSession || undefined }
+          );
+
+          if (productAfter) {
+            await InventoryMovement.create(
+              [
+                {
+                  product: item.product,
+                  sku: item.sku,
+                  movementType: 'release',
+                  quantityDelta: item.quantity,
+                  previousPhysical: productBefore.stock.physical,
+                  newPhysical: productAfter.stock.physical,
+                  previousAvailable: productBefore.stock.available,
+                  newAvailable: productAfter.stock.available,
+                  previousReserved: productBefore.stock.reserved,
+                  newReserved: productAfter.stock.reserved,
+                  actor: userId,
+                  actorRole: 'customer',
+                  orderReference: updatedOrder.orderReference,
+                  reason: `Stock release on customer order cancellation: ${updatedOrder.orderReference}`
+                }
+              ],
+              currentSession ? { session: currentSession } : {}
+            );
+          }
+        }
+      }
+
+      // Transition Payment status to failed
+      await Payment.findOneAndUpdate(
+        { order: updatedOrder._id },
+        {
+          $set: {
+            status: 'failed',
+            failureReason: 'Order cancelled by customer'
+          }
+        },
+        currentSession ? { session: currentSession } : {}
+      );
+    };
+
+    try {
+      if (session) {
+        await session.withTransaction(async () => {
+          await executeCancel(session);
+        });
+      } else {
+        await executeCancel(null);
+      }
 
       return updatedOrder;
     } catch (error) {
@@ -603,7 +631,9 @@ export const orderService = {
       }
       throw error;
     } finally {
-      session.endSession();
+      if (session) {
+        session.endSession();
+      }
     }
   }
 };

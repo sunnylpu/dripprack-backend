@@ -20,6 +20,22 @@ const categorySchema = new mongoose.Schema(
       maxlength: [500, 'Description cannot exceed 500 characters'],
       default: ''
     },
+    bannerImageUrl: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    bannerVideoUrl: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    featuredProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product'
+      }
+    ],
     isActive: {
       type: Boolean,
       default: true

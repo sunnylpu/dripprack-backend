@@ -43,9 +43,14 @@ const envSchema = z.object({
     .string()
     .transform((val) => val === 'true' || val === '1')
     .default('false'),
-  PAYMENT_PROVIDER: z.enum(['cod', 'stripe', 'mock']).default('cod'),
+  PAYMENT_PROVIDER: z.enum(['cod', 'stripe', 'dodo', 'mock']).default('cod'),
   STRIPE_SECRET_KEY: z.string().default(''),
   STRIPE_WEBHOOK_SECRET: z.string().default(''),
+  DODO_PAYMENTS_API_KEY: z.string().default(''),
+  DODO_PAYMENTS_PUBLISHABLE_KEY: z.string().default(''),
+  DODO_PAYMENTS_WEBHOOK_KEY: z.string().default(''),
+  DODO_PAYMENTS_PRODUCT_ID: z.string().default('pdt_0NrsStfz9KN9knEk3DgR2'),
+  DODO_PAYMENTS_ENVIRONMENT: z.enum(['test_mode', 'live_mode']).default('test_mode'),
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info')
