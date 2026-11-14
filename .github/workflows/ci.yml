@@ -40,6 +40,7 @@ jobs:
           COOKIE_SECRET: test_cookie_secret_at_least_32_characters_long_for_security
           COOKIE_SAME_SITE: lax
           COOKIE_SECURE: false
+          MONGODB_URI: mongodb://localhost:27017/driprack_test
           JWT_ACCESS_SECRET: test_jwt_access_secret_at_least_32_characters_long
           JWT_REFRESH_SECRET: test_jwt_refresh_secret_at_least_32_characters_long
           JWT_ACCESS_EXPIRES_IN: 15m
