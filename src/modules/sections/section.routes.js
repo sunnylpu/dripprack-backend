@@ -15,14 +15,14 @@ import { cacheControl } from '../../middleware/cacheControl.js';
 
 const router = Router();
 
-// Public: Get all sections (filterable by page, isActive)
-router.get('/', cacheControl(120, 300), validateRequest(sectionQuerySchema), sectionController.getSections);
+// Public: Get all sections (filterable by page, isActive) - low cache TTL for fast admin synchronization
+router.get('/', cacheControl(10, 30), validateRequest(sectionQuerySchema), sectionController.getSections);
 
 // Public: Get section by key (e.g., /api/v1/sections/key/home_hero_video)
-router.get('/key/:key', cacheControl(120, 300), validateRequest(sectionKeyParamsSchema), sectionController.getSectionByKey);
+router.get('/key/:key', cacheControl(10, 30), validateRequest(sectionKeyParamsSchema), sectionController.getSectionByKey);
 
 // Public: Get section by ID
-router.get('/:id', cacheControl(120, 300), validateRequest(sectionIdParamsSchema), sectionController.getSectionById);
+router.get('/:id', cacheControl(10, 30), validateRequest(sectionIdParamsSchema), sectionController.getSectionById);
 
 // Admin only: Create new storefront section
 router.post(
