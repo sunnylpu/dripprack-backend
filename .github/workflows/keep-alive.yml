@@ -1,0 +1,24 @@
+name: Production Backend Keep-Alive Ping
+
+on:
+  schedule:
+    # Run every 12 minutes to keep Render Free Tier warm (prevents 15-min idle spin-down)
+    - cron: '*/12 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keep-alive-ping
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping Render Free Instance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health Check Ping
+        run: |
+          echo "Sending keep-alive ping to Render backend..."
+          RESPONSE=$(curl -f -s -S --max-time 60 "https://dripprack-backend.onrender.com/api/v1/health")
+          echo "Response: $RESPONSE"
+          echo "Keep-alive ping completed at $(date -u)"

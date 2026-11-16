@@ -10,15 +10,17 @@ import {
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { authorize } from '../../middleware/authorize.js';
+import { cacheControl } from '../../middleware/cacheControl.js';
 
 const router = Router();
 
 // Public: Get all published products (with pagination, search, category filter, inStock, allowlisted sorting)
-router.get('/', validateRequest(productQuerySchema), productController.getPublicProducts);
+router.get('/', cacheControl(60, 180), validateRequest(productQuerySchema), productController.getPublicProducts);
 
 // Public: Get published product by ID or Slug
 router.get(
   '/:idOrSlug',
+  cacheControl(60, 180),
   validateRequest(productLookupParamsSchema),
   productController.getPublicProductByIdOrSlug
 );

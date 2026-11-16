@@ -1,6 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import pinoHttp from 'pino-http';
 import { env } from './config/env.js';
@@ -24,6 +25,9 @@ app.use(
     crossOriginEmbedderPolicy: false
   })
 );
+
+// Response Compression for fast wire-speed transfers
+app.use(compression());
 
 // Explicit CORS Allowlisting
 const allowedOrigins = env.CORS_ORIGIN.split(',').map((origin) => origin.trim());

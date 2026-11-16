@@ -11,17 +11,18 @@ import {
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { authorize } from '../../middleware/authorize.js';
+import { cacheControl } from '../../middleware/cacheControl.js';
 
 const router = Router();
 
 // Public: Get all sections (filterable by page, isActive)
-router.get('/', validateRequest(sectionQuerySchema), sectionController.getSections);
+router.get('/', cacheControl(120, 300), validateRequest(sectionQuerySchema), sectionController.getSections);
 
 // Public: Get section by key (e.g., /api/v1/sections/key/home_hero_video)
-router.get('/key/:key', validateRequest(sectionKeyParamsSchema), sectionController.getSectionByKey);
+router.get('/key/:key', cacheControl(120, 300), validateRequest(sectionKeyParamsSchema), sectionController.getSectionByKey);
 
 // Public: Get section by ID
-router.get('/:id', validateRequest(sectionIdParamsSchema), sectionController.getSectionById);
+router.get('/:id', cacheControl(120, 300), validateRequest(sectionIdParamsSchema), sectionController.getSectionById);
 
 // Admin only: Create new storefront section
 router.post(

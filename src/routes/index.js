@@ -14,6 +14,7 @@ import collectionRoutes from '../modules/collections/collection.routes.js';
 import projectRoutes from '../modules/projects/project.routes.js';
 import sectionRoutes from '../modules/sections/section.routes.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
+import { cacheControl } from '../middleware/cacheControl.js';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.get('/', (req, res) => {
 });
 
 // Public storefront safe configuration (no secrets exposed)
-router.get('/config', (req, res) => {
+router.get('/config', cacheControl(300, 600), (req, res) => {
   return ApiResponse.success(res, {
     message: 'Storefront public configuration retrieved successfully',
     data: {

@@ -9,12 +9,13 @@ import {
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { authorize } from '../../middleware/authorize.js';
+import { cacheControl } from '../../middleware/cacheControl.js';
 
 const router = Router();
 
 // Public storefront endpoints
-router.get('/', collectionController.getPublicCollections);
-router.get('/detail/:slug', validateRequest(collectionSlugParamsSchema), collectionController.getPublicCollectionBySlug);
+router.get('/', cacheControl(120, 300), collectionController.getPublicCollections);
+router.get('/detail/:slug', cacheControl(120, 300), validateRequest(collectionSlugParamsSchema), collectionController.getPublicCollectionBySlug);
 
 // Admin backoffice endpoints
 router.get('/admin/all', authenticate, authorize('admin'), collectionController.getAdminCollections);

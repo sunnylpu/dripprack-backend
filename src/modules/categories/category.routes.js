@@ -8,14 +8,15 @@ import {
 import { validateRequest } from '../../middleware/validateRequest.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { authorize } from '../../middleware/authorize.js';
+import { cacheControl } from '../../middleware/cacheControl.js';
 
 const router = Router();
 
 // Public: Get all active categories
-router.get('/', categoryController.getActiveCategories);
+router.get('/', cacheControl(120, 300), categoryController.getActiveCategories);
 
 // Public: Get single category by ID
-router.get('/:id', validateRequest(categoryParamsSchema), categoryController.getCategoryById);
+router.get('/:id', cacheControl(120, 300), validateRequest(categoryParamsSchema), categoryController.getCategoryById);
 
 // Admin only: Create category
 router.post(
