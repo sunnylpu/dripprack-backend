@@ -13,6 +13,7 @@ import paymentRoutes from '../modules/payments/payment.routes.js';
 import collectionRoutes from '../modules/collections/collection.routes.js';
 import projectRoutes from '../modules/projects/project.routes.js';
 import sectionRoutes from '../modules/sections/section.routes.js';
+import uploadRoutes from '../modules/uploads/upload.routes.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { cacheControl } from '../middleware/cacheControl.js';
 
@@ -102,6 +103,7 @@ router.use('/addresses', addressRoutes);
 router.use('/orders', orderRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/sections', sectionRoutes);
+router.use('/uploads', uploadRoutes);
 router.use('/admin', adminRoutes);
 
 // Test-only route for role authorization verification
